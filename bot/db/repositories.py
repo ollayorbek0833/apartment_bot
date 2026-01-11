@@ -1,0 +1,125 @@
+from datetime import datetime, timedelta
+from db.connection import get_connection
+
+# ---------- TASKS ----------
+
+def create_task(task_name: str):
+    conn = get_connection()
+    with conn:
+        conn.execute("INSERT INTO tasks(task_name) VALUES (?)", (task_name,))
+        conn.execute(
+            "INSERT INTO task_state(task_name, cursor_position) VALUES (?, 0)",
+            (task_name,)
+        )
+
+def task_exists(task_name: str) -> bool:
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT 1 FROM tasks WHERE task_name = ?", (task_name,)
+    )
+    return cur.fetchone() is not None
+
+# ---------- USERS ----------
+
+def add_user_to_task(task_name: str, user_id: int):
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT COALESCE(MAX(position), -1) + 1 FROM task_users WHERE task_name = ?",
+        (task_name,)
+    )
+    position = cur.fetchone()[0]
+
+    with conn:
+        conn.execute(
+            "INSERT INTO task_users(task_name, user_id, position) VALUES (?, ?, ?)",
+            (task_name, user_id, position)
+        )
+        conn.execute(
+            "INSERT INTO task_credits(task_name, user_id, credits) VALUES (?, ?, 0)",
+            (task_name, user_id)
+        )
+
+def get_task_users(task_name: str):
+    conn = get_connection()
+    cur = conn.execute(
+        """
+        SELECT user_id, position
+        FROM task_users
+        WHERE task_name = ? AND active = 1
+        ORDER BY position
+        """,
+        (task_name,)
+    )
+    return cur.fetchall()
+
+# ---------- CREDITS ----------
+
+def get_credit(task_name: str, user_id: int) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT credits FROM task_credits WHERE task_name = ? AND user_id = ?",
+        (task_name, user_id)
+    )
+    row = cur.fetchone()
+    return row["credits"] if row else 0
+
+def consume_credit(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            UPDATE task_credits
+            SET credits = credits - 1
+            WHERE task_name = ? AND user_id = ? AND credits > 0
+            """,
+            (task_name, user_id)
+        )
+
+def add_credit(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            UPDATE task_credits
+            SET credits = credits + 1
+            WHERE task_name = ? AND user_id = ?
+            """,
+            (task_name, user_id)
+        )
+
+# ---------- CURSOR ----------
+
+def get_cursor(task_name: str) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT cursor_position FROM task_state WHERE task_name = ?",
+        (task_name,)
+    )
+    return cur.fetchone()["cursor_position"]
+
+def set_cursor(task_name: str, position: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE task_state SET cursor_position = ? WHERE task_name = ?",
+            (position, task_name)
+        )
+
+# ---------- HISTORY ----------
+
+def add_history(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "INSERT INTO task_history(task_name, user_id, done_at) VALUES (?, ?, ?)",
+            (task_name, user_id, datetime.utcnow())
+        )
+
+def cleanup_history(days: int = 30):
+    conn = get_connection()
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    with conn:
+        conn.execute(
+            "DELETE FROM task_history WHERE done_at < ?",
+            (cutoff,)
+        )

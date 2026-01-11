@@ -10,7 +10,7 @@ venv/
 *.db
 
 # IDE
-.idea/
+../.idea/
 
 # Secrets
 config.py

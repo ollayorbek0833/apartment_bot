@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 from db.connection import get_connection
 from tg.permissions import is_allowed
 from db.repositories import create_task, task_exists, add_user_to_task
+from tg.utils import format_user
 
 
 async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,29 +49,30 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ User added to task.")
 
 
-async def show_team(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_team(update, context):
     if not await is_allowed(update, context):
-        return
-
-    if not context.args:
-        await update.message.reply_text("Usage: /show_team task_name")
         return
 
     task = context.args[0]
     simulation = simulate_next(task, 5)
 
-    if not simulation:
-        await update.message.reply_text("No users in task.")
-        return
-
     lines = ["🔮 Next 5 turns:"]
-    for uid, skipped in simulation:
+
+    for user_id, skipped in simulation:
+        tg_user = await context.bot.get_chat_member(
+            update.effective_chat.id,
+            user_id
+        )
+
+        name = format_user(tg_user.user)
+
         if skipped:
-            lines.append(f"{uid} (skipped)")
+            lines.append(f"{name} (skipped)")
         else:
-            lines.append(str(uid))
+            lines.append(name)
 
     await update.message.reply_text("\n".join(lines))
+
 
 async def remove_user(update, context):
     if not await is_allowed(update, context):

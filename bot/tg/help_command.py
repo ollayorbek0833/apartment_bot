@@ -1,44 +1,51 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from tg.permissions import is_allowed
 
 
-HELP_TEXT = """
-🤖 Apartment Duty Bot – Help
-
-This bot manages apartment duties fairly using a fixed rotation and skip credits.
+USER_HELP_TEXT = """
+🤖 ApartmentMate – Help
 
 ━━━━━━━━━━━━
 👤 USER COMMANDS
 ━━━━━━━━━━━━
 
-/task_name
-• Volunteer for a task (example: /cook, /bathroom)
-• You get +1 skip credit for that task
-• Skip credits are used automatically in future turns
-• No daily limits
-
 /now
-• Shows who is responsible RIGHT NOW for each task
-• Also shows the last person who did each task
+• Shows who is responsible RIGHT NOW
+• Read-only (does not rotate)
 
-/my_tasks
-• Shows which tasks you are part of
+/task_name
+• Example: /cook, /oshxona
+• If it is your turn → task is completed
+• If not your turn → you volunteer (+1 skip credit)
+• Same task command is ignored for 2 hours
+
+/show task_name
+• Shows next 5 turns for a task
+• Read-only
 
 /history
-• Shows your last 10 completed duties (all tasks)
+• Shows your last 10 completed duties
 
 /history task_name
-• Shows the last 3 times YOU did that task
+• Shows last 3 completions of that task
+• Format: DD.MM – @username
+
+/my_tasks
+• Shows tasks you belong to
 
 ━━━━━━━━━━━━
-🧠 HOW ROTATION WORKS
+📌 NOTES
 ━━━━━━━━━━━━
 
-• Each task has its own fixed order
-• Volunteering gives skip credits
-• If you have 3 credits → you are skipped 3 future turns
-• Skips are consumed one by one
-• Rotation order is NEVER changed
+• No daily reset
+• Rotation is automatic and fair
+• Skip credits are consumed automatically
+"""
+
+
+ADMIN_HELP_TEXT = """
+🤖 ApartmentMate – Admin Help
 
 ━━━━━━━━━━━━
 🛠 ADMIN COMMANDS
@@ -48,26 +55,41 @@ This bot manages apartment duties fairly using a fixed rotation and skip credits
 • Create a new task
 
 /add_user task_name  (reply to a user)
-• Add a user to a task team
+• Add user to task rotation
 
 /remove_user task_name  (reply to a user)
 • Remove user without breaking rotation
 
 /show task_name
-• Shows the NEXT 5 turns
-• Includes skipped users
-• Simulation only (does NOT change anything)
+• Shows next 5 turns (simulation)
+• Does NOT change anything
 
 ━━━━━━━━━━━━
-📌 NOTES
+🧠 ROTATION RULES
 ━━━━━━━━━━━━
 
+• Each task has a fixed order
+• Volunteering gives skip credits
+• Credits skip future turns
+• Rotation happens ONLY on task execution
 • No daily reset
-• History is kept for 30 days
-• Bot works only in groups
-• Only admins can manage tasks
+
+━━━━━━━━━━━━
+⚠️ ADMIN NOTES
+━━━━━━━━━━━━
+
+• Be careful when adding/removing users
+• Rotation order is preserved
 """
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(HELP_TEXT)
+    await update.message.reply_text(USER_HELP_TEXT)
+
+
+async def help_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_allowed(update, context):
+        await update.message.reply_text("❌ This command is for admins only.")
+        return
+
+    await update.message.reply_text(ADMIN_HELP_TEXT)

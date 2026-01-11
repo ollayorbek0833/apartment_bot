@@ -55,22 +55,28 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ User is already in this task.")
 
 
-async def show_team(update, context):
-    if not await is_allowed(update, context):
+async def show_team(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /show task_name")
         return
 
-    task = context.args[0]
-    simulation = simulate_next(task, 5)
+    task_name = context.args[0]
+    chat = update.effective_chat
+
+    simulation = simulate_next(task_name, 5)
+
+    if not simulation:
+        await update.message.reply_text("No users assigned to this task.")
+        return
 
     lines = ["🔮 Next 5 turns:"]
 
     for user_id, skipped in simulation:
-        tg_user = await context.bot.get_chat_member(
-            update.effective_chat.id,
-            user_id
-        )
-
-        name = format_user(tg_user.user)
+        try:
+            member = await context.bot.get_chat_member(chat.id, user_id)
+            name = format_user(member.user)
+        except Exception:
+            name = f"User({user_id})"
 
         if skipped:
             lines.append(f"{name} (skipped)")

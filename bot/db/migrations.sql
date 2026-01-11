@@ -32,3 +32,10 @@ CREATE TABLE IF NOT EXISTS task_state (
     task_name TEXT PRIMARY KEY,
     cursor_position INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS task_cooldowns (
+    task_name TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    last_used_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (task_name, user_id)
+);

@@ -52,6 +52,36 @@ def get_task_users(task_name: str):
     )
     return cur.fetchall()
 
+def is_in_cooldown(task_name: str, user_id: int, hours: int = 2) -> bool:
+    conn = get_connection()
+    cur = conn.execute(
+        """
+        SELECT last_used_at
+        FROM task_cooldowns
+        WHERE task_name = ? AND user_id = ?
+        """,
+        (task_name, user_id)
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+
+    last_used = datetime.fromisoformat(row["last_used_at"])
+    return datetime.utcnow() - last_used < timedelta(hours=hours)
+
+def update_cooldown(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO task_cooldowns(task_name, user_id, last_used_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(task_name, user_id)
+            DO UPDATE SET last_used_at = excluded.last_used_at
+            """,
+            (task_name, user_id, datetime.utcnow().isoformat())
+        )
+
 # ---------- CREDITS ----------
 
 def get_credit(task_name: str, user_id: int) -> int:

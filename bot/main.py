@@ -3,8 +3,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from config import BOT_TOKEN
 from tg.admin_commands import add_task, add_user, show_team, remove_user
 from tg.help_command import help_command
-from tg.user_commands import volunteer, my_tasks
-from tg.today_commands import today
+from tg.user_commands import my_tasks, task_command
+from tg.today_commands import now
 from tg.history_commands import history
 from scheduler.daily_jobs import setup_scheduler, scheduler
 
@@ -40,13 +40,13 @@ def main():
     app.add_handler(CommandHandler("show_team", show_team))
 
     # user
-    app.add_handler(CommandHandler("today", today))
+    app.add_handler(CommandHandler("now", now))
     app.add_handler(CommandHandler("history", history))
     app.add_handler(CommandHandler("my_tasks", my_tasks))
     app.add_handler(CommandHandler("help", help_command))
 
     # dynamic volunteer
-    app.add_handler(MessageHandler(filters.COMMAND, volunteer))
+    app.add_handler(MessageHandler(filters.COMMAND, task_command))
 
     # remember groups
     app.add_handler(MessageHandler(filters.ALL, remember_group))

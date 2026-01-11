@@ -17,9 +17,8 @@ This bot manages apartment duties fairly using a fixed rotation and skip credits
 • Skip credits are used automatically in future turns
 • No daily limits
 
-/today
-• Shows who is responsible TODAY for each task
-• Rotation + skip credits are applied
+/now
+• Shows who is responsible RIGHT NOW for each task
 • Also shows the last person who did each task
 
 /my_tasks

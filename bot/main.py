@@ -37,8 +37,7 @@ def main():
     app.add_handler(CommandHandler("add_task", add_task))
     app.add_handler(CommandHandler("add_user", add_user))
     app.add_handler(CommandHandler("remove_user", remove_user))
-    app.add_handler(CommandHandler("show_team", show_team))
-
+    app.add_handler(CommandHandler("show", show_team))
     # user
     app.add_handler(CommandHandler("now", now))
     app.add_handler(CommandHandler("history", history))

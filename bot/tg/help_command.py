@@ -53,7 +53,7 @@ This bot manages apartment duties fairly using a fixed rotation and skip credits
 /remove_user task_name  (reply to a user)
 • Remove user without breaking rotation
 
-/show_team task_name
+/show task_name
 • Shows the NEXT 5 turns
 • Includes skipped users
 • Simulation only (does NOT change anything)

@@ -6,7 +6,8 @@ from tg.utils import format_user
 async def build_today_text(bot, chat_id):
     """
     READ-ONLY.
-    Shows who is responsible today WITHOUT rotating or consuming credits.
+    Shows who is responsible right now WITHOUT rotating
+    and WITHOUT exposing skipped users.
     """
     conn = get_connection()
     cur = conn.execute("SELECT task_name FROM tasks")
@@ -18,24 +19,27 @@ async def build_today_text(bot, chat_id):
     lines = ["📍 Current Responsibilities"]
 
     for task in tasks:
-        simulation = simulate_next(task, 1)
+        # simulate enough turns to find first non-skipped user
+        simulation = simulate_next(task, 10)
 
-        if not simulation:
+        responsible_user_id = None
+
+        for user_id, skipped in simulation:
+            if not skipped:
+                responsible_user_id = user_id
+                break
+
+        if responsible_user_id is None:
             lines.append(f"🔹 {task}: no users")
             continue
 
-        user_id, skipped = simulation[0]
-
         try:
-            member = await bot.get_chat_member(chat_id, user_id)
+            member = await bot.get_chat_member(chat_id, responsible_user_id)
             display_name = format_user(member.user)
         except Exception:
-            display_name = f"User({user_id})"
+            display_name = f"User({responsible_user_id})"
 
-        if skipped:
-            lines.append(f"🔹 {task}: {display_name} (will be skipped)")
-        else:
-            lines.append(f"🔹 {task}: {display_name}")
+        lines.append(f"🔹 {task}: {display_name}")
 
     return "\n".join(lines)
 

@@ -45,8 +45,14 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Task does not exist.")
         return
 
-    add_user_to_task(task_name, user_id)
-    await update.message.reply_text("✅ User added to task.")
+    result = add_user_to_task(task_name, user_id)
+
+    if result == "added":
+        await update.message.reply_text("✅ User added to task.")
+    elif result == "reactivated":
+        await update.message.reply_text("♻️ User reactivated in task.")
+    else:
+        await update.message.reply_text("ℹ️ User is already in this task.")
 
 
 async def show_team(update, context):

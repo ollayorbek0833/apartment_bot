@@ -23,21 +23,63 @@ def task_exists(task_name: str) -> bool:
 
 def add_user_to_task(task_name: str, user_id: int):
     conn = get_connection()
+
+    # check if user already exists in task
     cur = conn.execute(
-        "SELECT COALESCE(MAX(position), -1) + 1 FROM task_users WHERE task_name = ?",
-        (task_name,)
+        """
+        SELECT active FROM task_users
+        WHERE task_name = ? AND user_id = ?
+        """,
+        (task_name, user_id)
     )
-    position = cur.fetchone()[0]
+    row = cur.fetchone()
 
     with conn:
-        conn.execute(
-            "INSERT INTO task_users(task_name, user_id, position) VALUES (?, ?, ?)",
-            (task_name, user_id, position)
-        )
-        conn.execute(
-            "INSERT INTO task_credits(task_name, user_id, credits) VALUES (?, ?, 0)",
-            (task_name, user_id)
-        )
+        if row is None:
+            # user not present at all → insert new
+            cur = conn.execute(
+                """
+                SELECT COALESCE(MAX(position), -1) + 1
+                FROM task_users
+                WHERE task_name = ?
+                """,
+                (task_name,)
+            )
+            position = cur.fetchone()[0]
+
+            conn.execute(
+                """
+                INSERT INTO task_users(task_name, user_id, position, active)
+                VALUES (?, ?, ?, 1)
+                """,
+                (task_name, user_id, position)
+            )
+
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO task_credits(task_name, user_id, credits)
+                VALUES (?, ?, 0)
+                """,
+                (task_name, user_id)
+            )
+
+            return "added"
+
+        if row["active"] == 0:
+            # user exists but inactive → reactivate
+            conn.execute(
+                """
+                UPDATE task_users
+                SET active = 1
+                WHERE task_name = ? AND user_id = ?
+                """,
+                (task_name, user_id)
+            )
+            return "reactivated"
+
+        # user already active
+        return "exists"
+
 
 def get_task_users(task_name: str):
     conn = get_connection()

@@ -2,6 +2,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from config import BOT_TOKEN
 from tg.admin_commands import add_task, add_user, show_team, remove_user
+from tg.data_command import data_command
 from tg.help_command import help_command, help_admin_command
 from tg.user_commands import my_tasks, task_command
 from tg.today_commands import now
@@ -37,14 +38,17 @@ def main():
     app.add_handler(CommandHandler("add_task", add_task))
     app.add_handler(CommandHandler("add_user", add_user))
     app.add_handler(CommandHandler("remove_user", remove_user))
-    app.add_handler(CommandHandler("show", show_team))
+    app.add_handler(CommandHandler("data", data_command))
+
     # user
     app.add_handler(CommandHandler("now", now))
     app.add_handler(CommandHandler("history", history))
     app.add_handler(CommandHandler("my_tasks", my_tasks))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("help_admin", help_admin_command))
+    app.add_handler(CommandHandler("show", show_team))
     app.add_handler(CommandHandler("start", help_command))
+
 
     # dynamic volunteer
     app.add_handler(MessageHandler(filters.COMMAND, task_command))

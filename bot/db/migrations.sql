@@ -39,3 +39,9 @@ CREATE TABLE IF NOT EXISTS task_cooldowns (
     last_used_at TIMESTAMP NOT NULL,
     PRIMARY KEY (task_name, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS task_volunteer_log (
+    task_name TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    volunteered_at TEXT NOT NULL
+);

@@ -5,7 +5,7 @@ from core.rotation_engine import get_next_responsible
 from core.simulation import simulate_next
 from db.repositories import (
     add_credit,
-    add_history, is_in_cooldown, update_cooldown
+    add_history, is_in_cooldown, update_cooldown, add_volunteer_log
 )
 from tg.utils import format_user
 
@@ -46,6 +46,7 @@ async def task_command(update, context):
 
     # 4️⃣ otherwise → VOLUNTEER
     add_credit(task_name, user.id)
+    add_volunteer_log(task_name, user.id)
     update_cooldown(task_name, user.id)
 
     await update.message.reply_text(

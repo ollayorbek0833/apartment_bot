@@ -80,7 +80,6 @@ def add_user_to_task(task_name: str, user_id: int):
         # user already active
         return "exists"
 
-
 def get_task_users(task_name: str):
     conn = get_connection()
     cur = conn.execute(
@@ -195,3 +194,33 @@ def cleanup_history(days: int = 30):
             "DELETE FROM task_history WHERE done_at < ?",
             (cutoff,)
         )
+
+def add_volunteer_log(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO task_volunteer_log(task_name, user_id, volunteered_at)
+            VALUES (?, ?, ?)
+            """,
+            (task_name, user_id, datetime.utcnow().isoformat())
+        )
+
+def get_activity_last_30_days():
+    conn = get_connection()
+    cur = conn.execute(
+        """
+        SELECT task_name, user_id, done_at AS ts, 'COMPLETED' AS type
+        FROM task_history
+        WHERE done_at >= datetime('now', '-30 days')
+
+        UNION ALL
+
+        SELECT task_name, user_id, volunteered_at AS ts, 'VOLUNTEER' AS type
+        FROM task_volunteer_log
+        WHERE volunteered_at >= datetime('now', '-30 days')
+
+        ORDER BY ts DESC
+        """
+    )
+    return cur.fetchall()

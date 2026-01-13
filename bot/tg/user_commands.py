@@ -11,45 +11,49 @@ from tg.utils import format_user
 
 
 async def task_command(update, context):
-    task_name = update.message.text[1:]  # /cook → cook
+    message = update.message
     user = update.effective_user
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not message or not user or not chat:
         return
 
-    # 1️⃣ cooldown check
+    task_name = message.text[1:]  # /cook -> cook
+
+    # 1️⃣ Cooldown check
     if is_in_cooldown(task_name, user.id):
-        await update.message.reply_text(
+        await message.reply_text(
             "⏳ You already used this task recently. Try again later."
         )
         return
 
-    # 2️⃣ simulate today's responsible
+    # 2️⃣ Simulate today's responsible (READ-ONLY)
     simulation = simulate_next(task_name, 1)
     if not simulation:
-        await update.message.reply_text("No users assigned to this task.")
+        await message.reply_text("❌ No users assigned to this task.")
         return
 
-    responsible_id, _ = simulation[0]
+    responsible_id, skipped = simulation[0]
 
-    # 3️⃣ if user is responsible → EXECUTE
+    # 3️⃣ If user IS responsible → EXECUTE task
     if user.id == responsible_id:
         executed_user_id = get_next_responsible(task_name)
+
+        # Save execution
         add_history(task_name, executed_user_id)
         update_cooldown(task_name, user.id)
 
-        await update.message.reply_text(
+        await message.reply_text(
             f"✅ {task_name} completed by {format_user(user)}. Thanks!"
         )
         return
 
-    # 4️⃣ otherwise → VOLUNTEER
+    # 4️⃣ Otherwise → VOLUNTEER
     add_credit(task_name, user.id)
     add_volunteer_log(task_name, user.id)
     update_cooldown(task_name, user.id)
 
-    await update.message.reply_text(
+    await message.reply_text(
         f"🙌 Thanks for volunteering for {task_name}! +1 skip credit"
     )
 

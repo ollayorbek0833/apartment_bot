@@ -45,3 +45,13 @@ CREATE TABLE IF NOT EXISTS task_volunteer_log (
     user_id INTEGER NOT NULL,
     volunteered_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS task_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_name TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    action_type TEXT CHECK(action_type IN ('DONE', 'VOLUNTEER')) NOT NULL,
+    message_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);

@@ -4,7 +4,8 @@ from telegram.ext import ContextTypes
 
 from db.connection import get_connection
 from tg.permissions import is_allowed
-from db.repositories import create_task, task_exists, add_user_to_task
+from db.repositories import create_task, task_exists, add_user_to_task, remove_credit, remove_volunteer_log, \
+    remove_last_history
 from tg.utils import format_user
 
 
@@ -109,3 +110,60 @@ async def remove_user(update, context):
         )
 
     await update.message.reply_text("User removed (rotation preserved).")
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # admin + owner check
+    if not await is_allowed(update, context):
+        return
+
+    message = update.message
+    if not message or not message.reply_to_message:
+        await message.reply_text("❌ Reply to a task action message to cancel it.")
+        return
+
+    replied = message.reply_to_message
+    text = replied.text or ""
+
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    # Try to detect task name from message
+    # Expected formats:
+    # ✅ cook completed by ...
+    # 🙌 Thanks for volunteering for cook! +1 skip credit
+    task_name = None
+
+    if "completed by" in text:
+        task_name = text.split(" ")[1]
+        action_type = "responsible"
+    elif "volunteering for" in text:
+        task_name = text.split("volunteering for ")[1].split("!")[0]
+        action_type = "volunteer"
+    else:
+        await message.reply_text("❌ Cannot detect task action from this message.")
+        return
+
+    user = replied.from_user
+    if not user:
+        return
+
+    # 🧹 CANCEL LOGIC
+    if action_type == "volunteer":
+        remove_credit(task_name, user.id)
+        remove_volunteer_log(task_name, user.id)
+
+        await message.reply_text(
+            f"↩️ Volunteer action cancelled.\n"
+            f"❌ Credit removed"
+        )
+
+    elif action_type == "responsible":
+        remove_last_history(task_name, user.id)
+
+        await message.reply_text(
+            f"↩️ Task completion cancelled.\n"
+            f"🔁 User is responsible again for *{task_name}*.",
+            parse_mode="Markdown"
+        )

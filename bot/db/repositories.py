@@ -224,3 +224,88 @@ def get_activity_last_30_days():
         """
     )
     return cur.fetchall()
+
+
+def log_action(task_name, user_id, action_type, chat_id, message_id):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO task_actions(task_name, user_id, action_type, chat_id, message_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (task_name, user_id, action_type, chat_id, message_id, datetime.utcnow().isoformat())
+        )
+
+
+def get_action_by_message(chat_id, message_id):
+    conn = get_connection()
+    cur = conn.execute(
+        """
+        SELECT * FROM task_actions
+        WHERE chat_id = ? AND message_id = ?
+        """,
+        (chat_id, message_id)
+    )
+    return cur.fetchone()
+
+
+def delete_action(action_id):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "DELETE FROM task_actions WHERE id = ?",
+            (action_id,)
+        )
+
+
+def remove_credit(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            UPDATE task_credits
+            SET credits = CASE
+                WHEN credits > 0 THEN credits - 1
+                ELSE 0
+            END
+            WHERE task_name = ? AND user_id = ?
+            """,
+            (task_name, user_id)
+        )
+
+
+def remove_volunteer_log(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            DELETE FROM task_volunteer_log
+            WHERE rowid = (
+                SELECT rowid
+                FROM task_volunteer_log
+                WHERE task_name = ? AND user_id = ?
+                ORDER BY volunteered_at DESC
+                LIMIT 1
+            )
+            """,
+            (task_name, user_id)
+        )
+
+
+def remove_last_history(task_name: str, user_id: int):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """
+            DELETE FROM task_history
+            WHERE rowid = (
+                SELECT rowid
+                FROM task_history
+                WHERE task_name = ? AND user_id = ?
+                ORDER BY done_at DESC
+                LIMIT 1
+            )
+            """,
+            (task_name, user_id)
+        )

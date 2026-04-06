@@ -2,7 +2,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from db.connection import get_connection
+from db.connection import get_db
 from tg.utils import format_user
 
 
@@ -13,23 +13,22 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not chat:
         return
 
-    conn = get_connection()
-
     # -------- /history task_name --------
     if context.args:
         task_name = context.args[0]
 
-        cur = conn.execute(
-            """
-            SELECT user_id, done_at
-            FROM task_history
-            WHERE task_name = ?
-            ORDER BY done_at DESC
-            LIMIT 3
-            """,
-            (task_name,)
-        )
-        rows = cur.fetchall()
+        with get_db() as conn:
+            cur = conn.execute(
+                """
+                SELECT user_id, done_at
+                FROM task_history
+                WHERE task_name = ?
+                ORDER BY done_at DESC
+                LIMIT 3
+                """,
+                (task_name,)
+            )
+            rows = cur.fetchall()
 
         if not rows:
             await update.message.reply_text("No history for this task.")
@@ -55,17 +54,18 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # -------- /history (personal history) --------
-    cur = conn.execute(
-        """
-        SELECT task_name, done_at
-        FROM task_history
-        WHERE user_id = ?
-        ORDER BY done_at DESC
-        LIMIT 10
-        """,
-        (user.id,)
-    )
-    rows = cur.fetchall()
+    with get_db() as conn:
+        cur = conn.execute(
+            """
+            SELECT task_name, done_at
+            FROM task_history
+            WHERE user_id = ?
+            ORDER BY done_at DESC
+            LIMIT 10
+            """,
+            (user.id,)
+        )
+        rows = cur.fetchall()
 
     if not rows:
         await update.message.reply_text("No history found.")

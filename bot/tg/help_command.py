@@ -34,6 +34,9 @@ USER_HELP_TEXT = """
 /my_tasks
 • Shows tasks you belong to
 
+/tasks
+• Shows all available tasks
+
 ━━━━━━━━━━━━
 📌 NOTES
 ━━━━━━━━━━━━

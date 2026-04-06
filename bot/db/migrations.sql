@@ -55,3 +55,7 @@ CREATE TABLE IF NOT EXISTS task_actions (
     chat_id INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS groups (
+    chat_id INTEGER PRIMARY KEY
+);

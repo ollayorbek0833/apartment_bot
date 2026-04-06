@@ -16,17 +16,18 @@ def simulate_next(task_name: str, steps: int):
     result = []
 
     index = cursor
+    safety = 0
 
-    while len(result) < steps:
+    while len(result) < steps and safety < size * steps * 2:
         user = users[index % size]
         uid = user["user_id"]
 
         if credits[uid] > 0:
             credits[uid] -= 1
-            result.append((uid, True))
         else:
-            result.append((uid, False))
+            result.append(uid)
 
         index += 1
+        safety += 1
 
     return result

@@ -1,10 +1,12 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from config import BOT_TOKEN
+from db.connection import init_db
+from db.repositories import save_group
 from tg.admin_commands import add_task, add_user, show_team, remove_user, cancel
 from tg.data_command import data_command
 from tg.help_command import help_command, help_admin_command
-from tg.user_commands import my_tasks, task_command
+from tg.user_commands import my_tasks, task_command, tasks_command
 from tg.today_commands import now
 from tg.history_commands import history
 from scheduler.daily_jobs import setup_scheduler, scheduler
@@ -19,14 +21,13 @@ async def post_init(app: Application):
 
 async def remember_group(update, context):
     chat = update.effective_chat
-    if not chat:
+    if not chat or chat.type not in ("group", "supergroup"):
         return
-
-    groups = context.application.bot_data.setdefault("groups", set())
-    groups.add(chat.id)
+    save_group(chat.id)
 
 
 def main():
+    init_db()
     app = (
         Application.builder()
         .token(TOKEN)
@@ -49,6 +50,7 @@ def main():
     app.add_handler(CommandHandler("show", show_team))
     app.add_handler(CommandHandler("start", help_command))
     app.add_handler(CommandHandler("cancel", cancel))
+    app.add_handler(CommandHandler("tasks", tasks_command))
 
     # dynamic volunteer
     app.add_handler(MessageHandler(filters.COMMAND, task_command))

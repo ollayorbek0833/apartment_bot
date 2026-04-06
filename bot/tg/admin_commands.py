@@ -2,10 +2,13 @@ from core.simulation import simulate_next
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from db.connection import get_connection
+from db.connection import get_db
 from tg.permissions import is_allowed
-from db.repositories import create_task, task_exists, add_user_to_task, remove_credit, remove_volunteer_log, \
-    remove_last_history
+from db.repositories import (
+    create_task, task_exists, add_user_to_task, remove_credit,
+    remove_volunteer_log, remove_last_history, get_action_by_message, delete_action,
+    get_cursor, set_cursor, get_task_users
+)
 from tg.utils import format_user
 
 
@@ -72,17 +75,14 @@ async def show_team(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines = ["🔮 Next 5 turns:"]
 
-    for user_id, skipped in simulation:
+    for user_id in simulation:
         try:
             member = await context.bot.get_chat_member(chat.id, user_id)
             name = format_user(member.user)
         except Exception:
             name = f"User({user_id})"
 
-        if skipped:
-            lines.append(f"{name} (skipped)")
-        else:
-            lines.append(name)
+        lines.append(name)
 
     await update.message.reply_text("\n".join(lines))
 
@@ -91,15 +91,22 @@ async def remove_user(update, context):
     if not await is_allowed(update, context):
         return
 
+    if not context.args:
+        await update.message.reply_text("Usage: /remove_user task_name (reply to user)")
+        return
+
     if not update.message.reply_to_message:
-        await update.message.reply_text("Reply to a user.")
+        await update.message.reply_text("❌ You must reply to a user.")
         return
 
     task = context.args[0]
+
+    if not task_exists(task):
+        await update.message.reply_text("❌ Task does not exist.")
+        return
     user_id = update.message.reply_to_message.from_user.id
 
-    conn = get_connection()
-    with conn:
+    with get_db() as conn:
         conn.execute(
             """
             UPDATE task_users
@@ -123,44 +130,38 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     replied = message.reply_to_message
-    text = replied.text or ""
-
     chat = update.effective_chat
     if not chat:
         return
 
-    # Try to detect task name from message
-    # Expected formats:
-    # ✅ cook completed by ...
-    # 🙌 Thanks for volunteering for cook! +1 skip credit
-    task_name = None
-
-    if "completed by" in text:
-        task_name = text.split(" ")[1]
-        action_type = "responsible"
-    elif "volunteering for" in text:
-        task_name = text.split("volunteering for ")[1].split("!")[0]
-        action_type = "volunteer"
-    else:
-        await message.reply_text("❌ Cannot detect task action from this message.")
+    action = get_action_by_message(chat.id, replied.message_id)
+    if not action:
+        await message.reply_text("❌ Cannot find a task action for this message.")
         return
 
-    user = replied.from_user
-    if not user:
-        return
+    task_name = action["task_name"]
+    user_id = action["user_id"]
+    action_type = action["action_type"]
 
-    # 🧹 CANCEL LOGIC
-    if action_type == "volunteer":
-        remove_credit(task_name, user.id)
-        remove_volunteer_log(task_name, user.id)
+    if action_type == "VOLUNTEER":
+        remove_credit(task_name, user_id)
+        remove_volunteer_log(task_name, user_id)
+        delete_action(action["id"])
 
         await message.reply_text(
             f"↩️ Volunteer action cancelled.\n"
             f"❌ Credit removed"
         )
 
-    elif action_type == "responsible":
-        remove_last_history(task_name, user.id)
+    elif action_type == "DONE":
+        remove_last_history(task_name, user_id)
+        # Revert cursor back by 1
+        users = get_task_users(task_name)
+        if users:
+            current_cursor = get_cursor(task_name)
+            reverted_cursor = (current_cursor - 1) % len(users)
+            set_cursor(task_name, reverted_cursor)
+        delete_action(action["id"])
 
         await message.reply_text(
             f"↩️ Task completion cancelled.\n"

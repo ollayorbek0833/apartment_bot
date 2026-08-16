@@ -56,6 +56,7 @@ def build_app():
         ("help", main.help_command), ("help_admin", main.help_admin_command),
         ("show", main.show_team), ("start", main.help_command),
         ("cancel", main.cancel), ("tasks", main.tasks_command),
+        ("credits", main.credits_command),
     ):
         app.add_handler(CommandHandler(name, handler))
     app.add_handler(MessageHandler(main.filters.COMMAND, main.task_command))

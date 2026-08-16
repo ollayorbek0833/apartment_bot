@@ -62,6 +62,39 @@ def _migrate_cursor_to_position(conn):
         )
 
 
+TASK_NAME_TABLES = (
+    "tasks", "task_users", "task_credits", "task_state",
+    "task_cooldowns", "task_history", "task_volunteer_log", "task_actions",
+)
+
+
+def _migrate_lowercase_task_names(conn):
+    """Duty names are matched lowercase, because that is how a command arrives.
+
+    A duty created as 'Kitchen' before names were validated could never be run:
+    /Kitchen normalises to 'kitchen' and finds nothing. Fold the old names down,
+    unless doing so would collide with a duty that already owns the lower name.
+    """
+    rows = conn.execute("SELECT task_name FROM tasks").fetchall()
+    existing = {row["task_name"] for row in rows}
+    for name in sorted(existing):
+        lower = name.lower()
+        if lower == name:
+            continue
+        if lower in existing:
+            log.warning(
+                "task %r cannot be folded to %r: both exist, leaving it alone", name, lower
+            )
+            continue
+        for table in TASK_NAME_TABLES:
+            conn.execute(
+                f"UPDATE {table} SET task_name = ? WHERE task_name = ?", (lower, name)
+            )
+        existing.discard(name)
+        existing.add(lower)
+        log.info("renamed task %r to %r so /%s reaches it", name, lower, lower)
+
+
 def init_db():
     existed = DB_PATH.exists()
     log.info("using database %s (%s)", DB_PATH, "existing" if existed else "NEW, empty")
@@ -78,11 +111,13 @@ def init_db():
         if not _column_exists(conn, "task_actions", "target_rowid"):
             conn.execute("ALTER TABLE task_actions ADD COLUMN target_rowid INTEGER")
 
-        applied = conn.execute(
-            "SELECT 1 FROM schema_migrations WHERE name = 'cursor_stores_position'"
-        ).fetchone()
-        if not applied:
-            _migrate_cursor_to_position(conn)
-            conn.execute(
-                "INSERT INTO schema_migrations(name) VALUES ('cursor_stores_position')"
-            )
+        for name, fn in (
+            ("lowercase_task_names", _migrate_lowercase_task_names),
+            ("cursor_stores_position", _migrate_cursor_to_position),
+        ):
+            applied = conn.execute(
+                "SELECT 1 FROM schema_migrations WHERE name = ?", (name,)
+            ).fetchone()
+            if not applied:
+                fn(conn)
+                conn.execute("INSERT INTO schema_migrations(name) VALUES (?)", (name,))

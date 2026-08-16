@@ -11,7 +11,7 @@ from db.repositories import save_group, remove_group
 from tg.admin_commands import add_task, add_user, show_team, remove_user, cancel
 from tg.data_command import data_command
 from tg.help_command import help_command, help_admin_command
-from tg.user_commands import my_tasks, task_command, tasks_command
+from tg.user_commands import credits_command, my_tasks, task_command, tasks_command
 from tg.today_commands import now
 from tg.history_commands import history
 from scheduler.daily_jobs import setup_scheduler, scheduler
@@ -30,8 +30,14 @@ TOKEN = BOT_TOKEN
 RESERVED_COMMANDS = (
     "add_task", "add_user", "remove_user", "data",
     "now", "history", "my_tasks", "help", "help_admin",
-    "show", "start", "cancel", "tasks",
+    "show", "start", "cancel", "tasks", "credits",
 )
+
+
+async def on_error(update, context):
+    """Nothing used to log a handler crash, so the bot just went quiet."""
+    log.exception("handler failed for update %s", getattr(update, "update_id", "?"),
+                  exc_info=context.error)
 
 
 async def post_init(app: Application):
@@ -92,6 +98,7 @@ def main():
     app.add_handler(CommandHandler("start", help_command))
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("tasks", tasks_command))
+    app.add_handler(CommandHandler("credits", credits_command))
 
     # dynamic duty commands (/oshxona, /cook, ...)
     app.add_handler(MessageHandler(filters.COMMAND, task_command))
@@ -99,6 +106,8 @@ def main():
     # remember groups — own handler group, so it sees commands and membership
     # changes too, not just plain chat messages
     app.add_handler(TypeHandler(Update, remember_group), group=1)
+
+    app.add_error_handler(on_error)
 
     log.info("bot started")
     app.run_polling(allowed_updates=["message", "edited_message", "my_chat_member"])

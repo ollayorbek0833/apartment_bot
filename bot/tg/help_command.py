@@ -38,6 +38,10 @@ USER_HELP_TEXT = """
 /tasks
 • Shows all available tasks
 
+/credits
+• Shows who is holding unused skip credits
+• /credits task_name for one task
+
 ━━━━━━━━━━━━
 📌 NOTES
 ━━━━━━━━━━━━

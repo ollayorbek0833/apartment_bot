@@ -28,7 +28,7 @@ async def build_today_text(bot, chat_id):
         simulation = simulate_next(task, 1)
 
         if not simulation:
-            lines.append(f"🔹 {task}: no users")
+            lines.append(f"🔹 /{task}: no users")
             continue
 
         responsible_user_id = simulation[0]
@@ -39,7 +39,8 @@ async def build_today_text(bot, chat_id):
         except Exception:
             display_name = f"User({responsible_user_id})"
 
-        lines.append(f"🔹 {task}: {display_name}")
+        # Leading slash so the duty is tappable straight from the digest.
+        lines.append(f"🔹 /{task}: {display_name}")
 
     return "\n".join(lines)
 

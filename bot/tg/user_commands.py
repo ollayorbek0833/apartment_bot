@@ -1,3 +1,5 @@
+from difflib import get_close_matches
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -6,8 +8,8 @@ from core.simulation import simulate_next
 from db.connection import get_db
 from db.repositories import (
     add_credit,
-    add_history, is_in_cooldown, update_cooldown, add_volunteer_log,
-    is_task_member, log_action, task_exists, get_all_tasks
+    add_history, get_credit, get_task_users, is_in_cooldown, update_cooldown,
+    add_volunteer_log, is_task_member, log_action, task_exists, get_all_tasks
 )
 from tg.utils import format_user
 
@@ -26,6 +28,14 @@ async def task_command(update, context):
     task_name = message.text.split()[0][1:].split("@")[0].lower()
 
     if not task_exists(task_name):
+        # Staying silent for every unknown command is right — other bots live in
+        # this group. But a near-miss is almost always a typo for a real duty,
+        # and silence used to get the typist blamed for skipping their turn.
+        close = get_close_matches(task_name, get_all_tasks(), n=1, cutoff=0.7)
+        if close:
+            await message.reply_text(
+                f"❓ No task called /{task_name}. Did you mean /{close[0]}? /tasks lists them all."
+            )
         return
 
     # 1. Only people in this duty's rotation can act on it. Without this the bot
@@ -118,3 +128,38 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "📋 All tasks:\n" + "\n".join(f"• /{t}" for t in tasks)
     await update.message.reply_text(text)
+
+
+async def credits_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the skip-credit ledger.
+
+    Credits decide who gets skipped, and nothing in the bot ever displayed them,
+    so a wrong balance was invisible to everyone until somebody felt cheated.
+    """
+    chat = update.effective_chat
+    if not update.message or not chat:
+        return
+
+    tasks = [context.args[0].lower()] if context.args else get_all_tasks()
+    tasks = [t for t in tasks if task_exists(t)]
+
+    if not tasks:
+        await update.message.reply_text("No such task. /tasks lists them all.")
+        return
+
+    lines = ["🎫 Skip credits"]
+    for task in tasks:
+        holders = []
+        for row in get_task_users(task):
+            balance = get_credit(task, row["user_id"])
+            if balance <= 0:
+                continue
+            try:
+                member = await context.bot.get_chat_member(chat.id, row["user_id"])
+                name = format_user(member.user)
+            except Exception:
+                name = f"User({row['user_id']})"
+            holders.append(f"{name} × {balance}")
+        lines.append(f"🔹 {task}: " + (", ".join(holders) if holders else "nobody"))
+
+    await update.message.reply_text("\n".join(lines))

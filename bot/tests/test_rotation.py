@@ -238,6 +238,38 @@ check("cooldown still measures real elapsed time",
       R.parse_ts("2026-08-17T02:30:00+05:00").timestamp())
 
 print()
+print("a duty cannot go permanently dead when everyone holds credits")
+# The audit's worst case: the only zero-credit member is removed while everyone
+# left holds two credits. The old scan budget ran out and simulate_next returned
+# [], so /now said "no users" and every duty command said "no users assigned"
+# forever, with the roster fully intact.
+t = fresh(users=(A, B, C, D))
+for u in (B, C, D):
+    R.add_credit(t, u)
+    R.add_credit(t, u)
+R.deactivate_user(t, A)
+check("the duty still names somebody", simulate_next(t, 1), [B])
+check("five turns still resolve", len(simulate_next(t, 5)), 5)
+who, _, _ = get_next_responsible(t)
+check("and the live engine agrees", who, B)
+
+print()
+print("uppercase duty names are folded down so their command works")
+if connection.DB_PATH.exists():
+    connection.DB_PATH.unlink()
+init_db()
+with get_db() as conn:
+    conn.execute("INSERT INTO tasks(task_name) VALUES ('Kitchen')")
+    conn.execute("INSERT INTO task_state(task_name, cursor_position) VALUES ('Kitchen', 0)")
+    conn.execute("INSERT INTO task_users(task_name,user_id,position,active) VALUES ('Kitchen',?,0,1)", (A,))
+    conn.execute("INSERT INTO task_credits(task_name,user_id,credits) VALUES ('Kitchen',?,0)", (A,))
+    conn.execute("DELETE FROM schema_migrations WHERE name = 'lowercase_task_names'")
+init_db()
+check("/kitchen now finds the task", R.task_exists("kitchen"), True)
+check("the old name is gone", R.task_exists("Kitchen"), False)
+check("its roster came along", [r["user_id"] for r in R.get_task_users("kitchen")], [A])
+
+print()
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
     sys.exit(1)

@@ -22,7 +22,7 @@ TASK_NAME_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 RESERVED_TASK_NAMES = {
     "add_task", "add_user", "remove_user", "data",
     "now", "history", "my_tasks", "help", "help_admin",
-    "show", "start", "cancel", "tasks",
+    "show", "start", "cancel", "tasks", "credits",
 }
 
 

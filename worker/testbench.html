@@ -1,0 +1,1296 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  ApartmentMate test bench — open this file in a browser, nothing to install.
+
+  A simulated group chat wired to the REAL rotation engine: the block marked
+  below is the esbuild output of worker/src/core/rotation.ts, pasted verbatim.
+  Regenerate it after changing the engine:
+
+      cd worker && npx esbuild src/core/rotation.ts --bundle --format=esm
+
+  Not the real bot: no Telegram, no D1, the 2-hour cooldown is off so you can
+  act more than once per duty, and /data prints the CSV instead of sending it.
+-->
+<title>ApartmentMate Test Bench</title>
+<style>
+  /* ---- tokens: light is the base, both dark paths redefine only these ---- */
+  :root {
+    --ground:      #F5F7F5;
+    --surface:     #FFFFFF;
+    --surface-2:   #EDF1EF;
+    --line:        #DAE2DF;
+    --line-strong: #C2CFCB;
+    --ink:         #14201E;
+    --muted:       #5B6B67;
+    --faint:       #8595901a;
+
+    --accent:      #0B7A6B;
+    --accent-soft: #0b7a6b14;
+    --accent-line: #0b7a6b40;
+    --brass:       #9A6B10;
+    --brass-soft:  #9a6b1014;
+    --alarm:       #A93A2B;
+    --alarm-soft:  #a93a2b14;
+
+    --bubble-them: #FFFFFF;
+    --bubble-me:   #0B7A6B;
+    --bubble-me-ink: #F2FBF9;
+    --bubble-bot:  #EDF1EF;
+
+    --shadow: 0 1px 2px #14201e0d, 0 8px 24px #14201e0a;
+
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0D1513;
+      --surface:     #151F1D;
+      --surface-2:   #1B2624;
+      --line:        #26332F;
+      --line-strong: #35453F;
+      --ink:         #E6EDEA;
+      --muted:       #8DA09B;
+      --faint:       #8da09b14;
+
+      --accent:      #46C3AC;
+      --accent-soft: #46c3ac14;
+      --accent-line: #46c3ac45;
+      --brass:       #D8A441;
+      --brass-soft:  #d8a44114;
+      --alarm:       #E47763;
+      --alarm-soft:  #e4776314;
+
+      --bubble-them: #1B2624;
+      --bubble-me:   #1F6B5F;
+      --bubble-me-ink: #EAFBF7;
+      --bubble-bot:  #1B2624;
+
+      --shadow: 0 1px 2px #00000040, 0 8px 24px #00000030;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0D1513;
+    --surface:     #151F1D;
+    --surface-2:   #1B2624;
+    --line:        #26332F;
+    --line-strong: #35453F;
+    --ink:         #E6EDEA;
+    --muted:       #8DA09B;
+    --faint:       #8da09b14;
+
+    --accent:      #46C3AC;
+    --accent-soft: #46c3ac14;
+    --accent-line: #46c3ac45;
+    --brass:       #D8A441;
+    --brass-soft:  #d8a44114;
+    --alarm:       #E47763;
+    --alarm-soft:  #e4776314;
+
+    --bubble-them: #1B2624;
+    --bubble-me:   #1F6B5F;
+    --bubble-me-ink: #EAFBF7;
+    --bubble-bot:  #1B2624;
+
+    --shadow: 0 1px 2px #00000040, 0 8px 24px #00000030;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 20px 64px;
+  }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 18px;
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(24px, 3.4vw, 33px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .masthead p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 62ch;
+  }
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-line);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 4px 11px 4px 9px;
+    white-space: nowrap;
+  }
+  .live::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ---- panel furniture ---- */
+  .label {
+    font-family: var(--serif);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+    gap: 26px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .cols { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* ---- who am I ---- */
+  .whobar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .whobar .label { margin: 0 4px 0 0; }
+  .who {
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 5px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .who:hover { border-color: var(--accent); }
+  .who[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bubble-me-ink);
+  }
+  .who .crown {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    opacity: 0.75;
+  }
+
+  /* ---- chat ---- */
+  .chat { display: flex; flex-direction: column; overflow: hidden; }
+  .chat-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .chat-head strong { font-size: 14px; }
+  .chat-head span {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .log {
+    height: 460px;
+    overflow-y: auto;
+    padding: 16px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    background:
+      radial-gradient(circle at 18% 12%, var(--faint) 0 1px, transparent 1.4px) 0 0 / 22px 22px,
+      var(--ground);
+  }
+  .msg { max-width: 86%; display: flex; flex-direction: column; gap: 2px; }
+  .msg.from-user { align-self: flex-end; align-items: flex-end; }
+  .msg.from-bot, .msg.from-other { align-self: flex-start; }
+  .msg .who-said {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 4px;
+  }
+  .bubble {
+    border: 1px solid transparent;
+    border-radius: 13px;
+    padding: 8px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14.5px;
+    line-height: 1.45;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    display: block;
+  }
+  .from-other .bubble { background: var(--bubble-them); border-color: var(--line); border-bottom-left-radius: 4px; }
+  .from-bot .bubble   { background: var(--bubble-bot);  border-color: var(--line); border-bottom-left-radius: 4px; }
+  .from-user .bubble  { background: var(--bubble-me); color: var(--bubble-me-ink); border-bottom-right-radius: 4px; }
+  .bubble:hover { border-color: var(--accent); }
+  .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .msg.selected .bubble { box-shadow: 0 0 0 2px var(--accent); }
+
+  .sysnote {
+    align-self: center;
+    max-width: 94%;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px dashed var(--line-strong);
+    border-radius: 9px;
+    padding: 7px 12px;
+  }
+  .sysnote b { color: var(--ink); font-weight: 600; }
+
+  /* ---- composer ---- */
+  .composer { border-top: 1px solid var(--line); background: var(--surface); }
+  .replybar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--accent-soft);
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .replybar.on { display: flex; }
+  .replybar .snip {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+  .replybar button {
+    border: 0; background: none; cursor: pointer;
+    color: var(--muted); font-size: 17px; line-height: 1; padding: 2px 4px;
+  }
+  .replybar button:hover { color: var(--alarm); }
+
+  .chips {
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .chip {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-2);
+    color: var(--ink);
+    border-radius: 7px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .entry { display: flex; gap: 8px; padding: 10px 14px 13px; }
+  .entry input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line-strong);
+    background: var(--ground);
+    color: var(--ink);
+  }
+  .entry input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .entry button {
+    font: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--bubble-me-ink);
+    border-radius: 8px;
+    padding: 0 17px;
+  }
+  .entry button:hover { filter: brightness(1.07); }
+
+  /* ---- state side ---- */
+  .side { display: flex; flex-direction: column; gap: 22px; }
+
+  .duty { padding: 15px 16px 17px; }
+  .duty + .duty { margin-top: 12px; }
+  .duty-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .duty-head h3 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .duty-head em {
+    font-style: normal;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* the queue track — the caret under the next person is the whole point */
+  .track { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 3px; }
+  .slot {
+    flex: none;
+    min-width: 76px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 9px 7px;
+    background: var(--surface-2);
+    position: relative;
+    transition: border-color .25s, background .25s;
+  }
+  .slot .nm { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .slot .pos {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+  .slot.up {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .slot.up::after {
+    content: "▲ next";
+    position: absolute;
+    left: 9px;
+    bottom: -19px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.07em;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .slot.out {
+    opacity: 0.42;
+    border-style: dashed;
+  }
+  .slot.out .nm { text-decoration: line-through; }
+  .slot .tokens {
+    display: flex;
+    gap: 3px;
+    margin-top: 5px;
+    min-height: 9px;
+  }
+  .tok {
+    width: 15px; height: 9px;
+    border-radius: 2px;
+    background: var(--brass-soft);
+    border: 1px solid var(--brass);
+  }
+  .track-pad { height: 20px; }
+
+  .kv {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .kv b { color: var(--ink); font-weight: 600; }
+
+  /* ---- scenarios ---- */
+  .scn { padding: 15px 16px 17px; }
+  .scn-list { display: flex; flex-direction: column; gap: 9px; }
+  .scenario {
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+    border-radius: 9px;
+    padding: 11px 13px;
+    display: grid;
+    gap: 3px;
+  }
+  .scenario:hover { border-color: var(--accent); }
+  .scenario:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .scenario strong { font-size: 13.5px; font-weight: 600; }
+  .scenario span { font-size: 12.5px; color: var(--muted); }
+
+  .ledger { padding: 15px 16px 17px; }
+  .ledger ol {
+    margin: 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 13px;
+    max-height: 190px;
+    overflow-y: auto;
+  }
+  .ledger li::marker { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .ledger .none { color: var(--muted); font-size: 13px; margin: 0; }
+  .ledger .t { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .foot {
+    margin-top: 30px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 74ch;
+  }
+  .foot code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .foot p { margin: 0 0 8px; }
+
+  .reset {
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--muted);
+    border-radius: 7px;
+    padding: 4px 10px;
+  }
+  .reset:hover { border-color: var(--alarm); color: var(--alarm); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <h1>ApartmentMate Test Bench</h1>
+    <span class="live">running the shipped engine</span>
+    <p>
+      A simulated group chat wired to the exact rotation code on
+      <code style="font-family:var(--mono);font-size:12px">feat/cloudflare-worker</code>.
+      Pick who you are, send commands, and watch the state on the right. No bot token, no deploy.
+    </p>
+  </header>
+
+  <div class="cols">
+    <div>
+      <div class="whobar">
+        <p class="label">You are</p>
+        <div id="who-buttons" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+
+      <section class="panel chat">
+        <div class="chat-head">
+          <strong id="chat-title">Kvartira 12</strong>
+          <span id="chat-sub">4 members</span>
+        </div>
+        <div class="log" id="log" role="log" aria-live="polite"></div>
+        <div class="composer">
+          <div class="replybar" id="replybar">
+            <span>Replying to</span>
+            <span class="snip" id="reply-snip"></span>
+            <button id="reply-clear" aria-label="Cancel reply">&times;</button>
+          </div>
+          <div class="chips" id="chips"></div>
+          <form class="entry" id="entry">
+            <input id="input" autocomplete="off" spellcheck="false"
+                   placeholder="/oshxona" aria-label="Message" />
+            <button type="submit">Send</button>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div class="side">
+      <section>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <p class="label">What the bot knows</p>
+          <button class="reset" id="reset">Reset everything</button>
+        </div>
+        <div id="duties"></div>
+      </section>
+
+      <section>
+        <p class="label">Try a situation</p>
+        <div class="panel scn">
+          <div class="scn-list" id="scenarios"></div>
+        </div>
+      </section>
+
+      <section>
+        <p class="label">Recorded activity</p>
+        <div class="panel ledger" id="ledger"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="foot">
+    <p><strong>What is real here.</strong> The rotation engine is the compiled build of
+      <code>worker/src/core/rotation.ts</code> — turn order, skip credits and the cursor are decided
+      by the code that will run in production. The replies are the same strings the bot sends.</p>
+    <p><strong>What is not.</strong> There is no Telegram and no database, so the 2-hour cooldown is
+      switched off (otherwise you could only act once per duty), and <code>/data</code> shows the CSV
+      on screen instead of sending a file.</p>
+    <p><strong>To test undo:</strong> tap any bot confirmation to reply to it, then send
+      <code>/cancel</code> as the owner.</p>
+  </div>
+</div>
+
+<script type="module">
+/* ============================================================
+   The shipped rotation engine, compiled verbatim from
+   worker/src/core/rotation.ts. Do not edit here — edit there.
+   ============================================================ */
+function startIndex(roster, cursor) {
+  for (let i = 0; i < roster.length; i++) {
+    if (roster[i].position >= cursor) return i;
+  }
+  return 0;
+}
+function nextTurn(roster, cursor, credits) {
+  if (roster.length === 0) return null;
+  let index = startIndex(roster, cursor);
+  const everyoneHasCredit = roster.every((m) => (credits.get(m.user_id) ?? 0) > 0);
+  if (everyoneHasCredit) {
+    return { index, userId: roster[index].user_id, skipped: [] };
+  }
+  const skipped = [];
+  for (let step = 0; step < roster.length; step++) {
+    const member = roster[index % roster.length];
+    const balance = credits.get(member.user_id) ?? 0;
+    if (balance > 0) {
+      credits.set(member.user_id, balance - 1);
+      skipped.push(member.user_id);
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  const finalIndex = index % roster.length;
+  return { index: finalIndex, userId: roster[finalIndex].user_id, skipped };
+}
+function simulate(roster, cursor, credits, steps) {
+  if (roster.length === 0) return [];
+  const scratch = new Map(credits);
+  let position = cursor;
+  const result = [];
+  for (let i = 0; i < Math.max(0, steps); i++) {
+    const turn = nextTurn(roster, position, scratch);
+    if (!turn) break;
+    result.push(turn.userId);
+    position = roster[(turn.index + 1) % roster.length].position;
+  }
+  return result;
+}
+function cursorAfter(roster, turn) {
+  return roster[(turn.index + 1) % roster.length].position;
+}
+
+/* ============================================================
+   People
+   ============================================================ */
+const OWNER = 501;
+const PEOPLE = [
+  { id: 501, name: 'Ollayorbek', handle: '@ollayorbek' },
+  { id: 502, name: 'Dilnoza',    handle: '@dilnoza' },
+  { id: 503, name: 'Sardor',     handle: '@sardor' },
+  { id: 504, name: 'Jasur',      handle: '@jasur' },
+];
+const nameOf = (id) => PEOPLE.find((p) => p.id === id)?.handle ?? `User(${id})`;
+const shortOf = (id) => PEOPLE.find((p) => p.id === id)?.name ?? `User(${id})`;
+
+/* ============================================================
+   State — the same shape the D1 tables hold
+   ============================================================ */
+const RESERVED = new Set(['add_task','add_user','remove_user','data','now','history',
+  'my_tasks','help','help_admin','show','start','cancel','tasks','credits','claim']);
+const TASK_RE = /^[a-z0-9_]{1,32}$/;
+
+let state, me, replyTo, msgSeq;
+
+function freshState() {
+  return {
+    tasks: {
+      oshxona: {
+        members: [
+          { user_id: 501, position: 0, active: true },
+          { user_id: 502, position: 1, active: true },
+          { user_id: 503, position: 2, active: true },
+          { user_id: 504, position: 3, active: true },
+        ],
+        credits: { 501: 0, 502: 0, 503: 0, 504: 0 },
+        cursor: 0,
+      },
+      hammom: {
+        members: [
+          { user_id: 502, position: 0, active: true },
+          { user_id: 503, position: 1, active: true },
+          { user_id: 504, position: 2, active: true },
+        ],
+        credits: { 502: 0, 503: 0, 504: 0 },
+        cursor: 0,
+      },
+    },
+    history: [],
+    volunteerLog: [],
+    actions: {},
+    messages: [],
+  };
+}
+
+const roster = (t) => state.tasks[t].members.filter((m) => m.active)
+  .map((m) => ({ user_id: m.user_id, position: m.position }));
+const creditMap = (t) => new Map(Object.entries(state.tasks[t].credits).map(([k, v]) => [Number(k), v]));
+const isMember = (t, id) => state.tasks[t].members.some((m) => m.user_id === id && m.active);
+const taskNames = () => Object.keys(state.tasks).sort();
+
+function preview(t, steps) {
+  return simulate(roster(t), state.tasks[t].cursor, creditMap(t), steps);
+}
+
+function takeTurn(t) {
+  const r = roster(t);
+  if (r.length === 0) return null;
+  const prevCursor = state.tasks[t].cursor;
+  const credits = creditMap(t);
+  const turn = nextTurn(r, prevCursor, credits);
+  if (!turn) return null;
+  for (const id of turn.skipped) state.tasks[t].credits[id] -= 1;
+  state.tasks[t].cursor = cursorAfter(r, turn);
+  return { turnOwner: turn.userId, prevCursor, consumed: turn.skipped };
+}
+
+function undoTurn(t, prevCursor, consumed) {
+  if (prevCursor !== null && prevCursor !== undefined) state.tasks[t].cursor = prevCursor;
+  for (const id of consumed) {
+    if (id in state.tasks[t].credits) state.tasks[t].credits[id] += 1;
+  }
+}
+
+/* typo suggestion, same rule as src/tg/format.ts */
+function editDistance(a, b) {
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = tmp;
+    }
+  }
+  return prev[b.length];
+}
+function closestTask(name, tasks) {
+  let best = null, bestScore = Infinity;
+  for (const t of tasks) {
+    const d = editDistance(name, t);
+    if (d < bestScore) { bestScore = d; best = t; }
+  }
+  const allowed = Math.max(1, Math.floor(name.length / 4));
+  return best !== null && bestScore <= allowed ? best : null;
+}
+
+/* ============================================================
+   Chat plumbing
+   ============================================================ */
+const logEl = document.getElementById('log');
+
+function post(kind, text, opts = {}) {
+  const id = ++msgSeq;
+  state.messages.push({ id, kind, text, author: opts.author ?? null });
+  render();
+  requestAnimationFrame(() => { logEl.scrollTop = logEl.scrollHeight; });
+  return id;
+}
+const say = (text, author) => post('other', text, { author });
+const bot = (text) => post('bot', text);
+const note = (html) => post('note', html);
+
+function ownerOnly() {
+  if (me !== OWNER) {
+    bot('❌ Bot owner authorization required.');
+    return false;
+  }
+  return true;
+}
+
+/* ============================================================
+   Commands — replies match src/tg/bot.ts word for word
+   ============================================================ */
+function handle(raw) {
+  const text = raw.trim();
+  if (!text) return;
+
+  if (!text.startsWith('/')) { say(text, me); return; }
+
+  say(text, me);
+
+  const [head, ...rest] = text.split(/\s+/);
+  const cmd = head.slice(1).split('@')[0].toLowerCase();
+  const arg = (rest[0] ?? '').toLowerCase();
+
+  switch (cmd) {
+    case 'help': case 'start': return cmdHelp();
+    case 'now':      return cmdNow();
+    case 'tasks':    return cmdTasks();
+    case 'my_tasks': return cmdMyTasks();
+    case 'credits':  return cmdCredits(arg);
+    case 'show':     return cmdShow(arg);
+    case 'history':  return cmdHistory(arg);
+    case 'add_task': return cmdAddTask(arg, rest.slice(1));
+    case 'add_user': return cmdAddUser(arg);
+    case 'remove_user': return cmdRemoveUser(arg);
+    case 'cancel':   return cmdCancel();
+    case 'data':     return cmdData();
+    case 'claim':    return cmdClaim();
+    case 'help_admin': return ownerOnly() && bot('🛠 Admin commands: /add_task, /add_user, /remove_user, /show, /data, /cancel, /claim');
+    default:         return cmdDuty(cmd);
+  }
+}
+
+function cmdHelp() {
+  bot(
+`🤖 ApartmentMate
+
+/now — who is responsible right now
+/<duty> — e.g. /oshxona
+   • your turn → the duty is completed
+   • not your turn → you cover it: the duty is done,
+     the rotation moves on, and you get +1 skip credit
+/show <duty> — the next 5 turns
+/credits — who is holding unused skip credits
+/history — your last duties
+/my_tasks — the duties you are in
+/tasks — every duty`);
+}
+
+function cmdNow() {
+  const names = taskNames();
+  if (names.length === 0) return bot('No tasks configured.');
+  const lines = ['📍 Current Responsibilities'];
+  for (const t of names) {
+    const up = preview(t, 1);
+    lines.push(up.length ? `🔹 /${t}: ${nameOf(up[0])}` : `🔹 /${t}: no users`);
+  }
+  bot(lines.join('\n'));
+}
+
+function cmdTasks() {
+  const names = taskNames();
+  if (!names.length) return bot('No tasks configured yet.');
+  bot('📋 All tasks:\n' + names.map((t) => `• /${t}`).join('\n'));
+}
+
+function cmdMyTasks() {
+  const mine = taskNames().filter((t) => isMember(t, me));
+  if (!mine.length) return bot('You are not assigned to any tasks.');
+  bot('🧾 Your tasks:\n' + mine.map((t) => `- /${t}`).join('\n'));
+}
+
+function cmdCredits(arg) {
+  const names = arg ? taskNames().filter((t) => t === arg) : taskNames();
+  if (!names.length) return bot('No such task. /tasks lists them all.');
+  const lines = ['🎫 Skip credits'];
+  for (const t of names) {
+    const holders = roster(t)
+      .filter((m) => (state.tasks[t].credits[m.user_id] ?? 0) > 0)
+      .map((m) => `${nameOf(m.user_id)} × ${state.tasks[t].credits[m.user_id]}`);
+    lines.push(`🔹 ${t}: ${holders.length ? holders.join(', ') : 'nobody'}`);
+  }
+  bot(lines.join('\n'));
+}
+
+function cmdShow(arg) {
+  if (!arg) return bot('Usage: /show task_name');
+  if (!(arg in state.tasks)) {
+    return bot(`❌ There is no task called '${arg}'. /tasks lists them all.`);
+  }
+  const up = preview(arg, 5);
+  if (!up.length) return bot('No users assigned to this task.');
+  bot(['🔮 Next 5 turns:', ...up.map(nameOf)].join('\n'));
+}
+
+function cmdHistory(arg) {
+  if (arg) {
+    if (!(arg in state.tasks)) {
+      return bot(`❌ There is no task called '${arg}'. /tasks lists them all.`);
+    }
+    const rows = state.history.filter((h) => h.task === arg).slice(-3).reverse();
+    if (!rows.length) return bot('No history for this task.');
+    bot([`🕒 Last ${arg} duties:`, ...rows.map((r) => `${r.day} – ${nameOf(r.user)}`)].join('\n'));
+    return;
+  }
+  const rows = state.history.filter((h) => h.user === me).slice(-10).reverse();
+  if (!rows.length) return bot('No history found.');
+  bot(['🕒 Your last duties:', ...rows.map((r) => `${r.day} – ${r.task}`)].join('\n'));
+}
+
+function cmdAddTask(arg, extra) {
+  if (!ownerOnly()) return;
+  if (!arg) return bot('Usage: /add_task task_name');
+  if (extra.length) {
+    return bot('❌ A task name is one word, because it becomes a command you type. Try ' +
+      `/add_task ${[arg, ...extra].map((w) => w.toLowerCase()).join('_')}`);
+  }
+  if (!TASK_RE.test(arg)) {
+    return bot('❌ A task name must be 1-32 characters of a-z, 0-9 or _ , because it becomes a command you type. Example: /add_task oshxona');
+  }
+  if (RESERVED.has(arg)) {
+    return bot(`❌ '${arg}' is one of the bot's own commands. Pick another name, otherwise /${arg} would never reach the task.`);
+  }
+  if (arg in state.tasks) return bot('⚠️ Task already exists.');
+  state.tasks[arg] = { members: [], credits: {}, cursor: 0 };
+  bot(`✅ Task '${arg}' created. Run it with /${arg}`);
+}
+
+function targetFromReply() {
+  if (!replyTo) return null;
+  const m = state.messages.find((x) => x.id === replyTo);
+  return m && m.author ? m.author : null;
+}
+
+function cmdAddUser(arg) {
+  if (!ownerOnly()) return;
+  if (!arg) return bot('Usage: /add_user task_name (reply to a user)');
+  const target = targetFromReply();
+  if (!target) return bot("❌ Reply to a real user's message, not a bot.");
+  if (!(arg in state.tasks)) return bot('❌ Task does not exist.');
+
+  const t = state.tasks[arg];
+  const existing = t.members.find((m) => m.user_id === target);
+  if (!existing) {
+    const next = t.members.reduce((mx, m) => Math.max(mx, m.position), -1) + 1;
+    t.members.push({ user_id: target, position: next, active: true });
+    t.credits[target] ??= 0;
+    bot(`✅ ${nameOf(target)} added to ${arg}.`);
+  } else if (!existing.active) {
+    existing.active = true;
+    t.credits[target] ??= 0;
+    bot(`♻️ ${nameOf(target)} reactivated in ${arg}.`);
+  } else {
+    bot(`ℹ️ ${nameOf(target)} is already in ${arg}.`);
+  }
+  clearReply();
+}
+
+function cmdRemoveUser(arg) {
+  if (!ownerOnly()) return;
+  if (!arg) return bot('Usage: /remove_user task_name (reply to a user)');
+  const target = targetFromReply();
+  if (!target) return bot("❌ Reply to a real user's message.");
+  if (!(arg in state.tasks)) return bot('❌ Task does not exist.');
+
+  const m = state.tasks[arg].members.find((x) => x.user_id === target && x.active);
+  if (!m) return bot(`ℹ️ ${nameOf(target)} is not in ${arg}.`);
+  m.active = false;
+  clearReply();
+
+  const up = preview(arg, 1);
+  if (!up.length) {
+    return bot(`✅ ${nameOf(target)} removed. ${arg} now has nobody in its rotation.`);
+  }
+  bot(`✅ ${nameOf(target)} removed from ${arg}. Next up: ${nameOf(up[0])}.`);
+}
+
+function cmdCancel() {
+  if (!ownerOnly()) return;
+  if (!replyTo) return bot('❌ Reply to a task action message to cancel it.');
+  const action = state.actions[replyTo];
+  if (!action) return bot('❌ Cannot find a task action for this message.');
+
+  const { task, user, type, prevCursor, consumed, historyId } = action;
+  state.history = state.history.filter((h) => h.id !== historyId);
+  undoTurn(task, prevCursor, consumed);
+  delete state.actions[replyTo];
+  clearReply();
+
+  if (type === 'VOLUNTEER') {
+    state.tasks[task].credits[user] = Math.max(0, (state.tasks[task].credits[user] ?? 0) - 1);
+    state.volunteerLog.pop();
+    bot(`↩️ Cover cancelled for ${task}.\n❌ Credit removed, and the turn goes back to whoever had it.`);
+    return;
+  }
+  const refunded = consumed.length ? `\n🎫 ${consumed.length} skip credit(s) refunded.` : '';
+  bot(`↩️ Task completion cancelled.\n🔁 User is responsible again for ${task}.${refunded}`);
+}
+
+function cmdData() {
+  if (!ownerOnly()) return;
+  const rows = [
+    ...state.history.map((h) => ({ ...h, type: 'COMPLETED', ts: h.stamp })),
+    ...state.volunteerLog.map((v) => ({ ...v, type: 'VOLUNTEER', ts: v.stamp })),
+  ].sort((a, b) => b.ts - a.ts);
+  if (!rows.length) return bot('No history data for the last 30 days.');
+  const csv = ['date,time,task,user,type',
+    ...rows.map((r) => `${r.day},${r.time},${r.task},${nameOf(r.user)},${r.type}`)].join('\n');
+  bot('📊 Duty history (last 30 days)\n\n' + csv);
+}
+
+function cmdClaim() {
+  if (me !== OWNER) return bot('❌ Bot owner authorization required.');
+  bot('ℹ️ This group already is the apartment.');
+}
+
+function cmdDuty(task) {
+  if (!(task in state.tasks)) {
+    const near = closestTask(task, taskNames());
+    if (near) bot(`❓ No task called /${task}. Did you mean /${near}? /tasks lists them all.`);
+    return;
+  }
+  if (!isMember(task, me)) {
+    return bot(`❌ You are not in the ${task} rotation, so this does not count. Ask an admin to add you.`);
+  }
+
+  const up = preview(task, 1);
+  if (!up.length) return bot('❌ No users assigned to this task.');
+  const mine = up[0] === me;
+
+  const taken = takeTurn(task);
+  if (!taken) return bot('❌ No users assigned to this task.');
+
+  const stamp = Date.now();
+  const entry = {
+    id: 'h' + stamp + '-' + Math.round(state.history.length),
+    task, user: me, stamp,
+    day: fmtDay(stamp), time: fmtTime(stamp),
+  };
+  state.history.push(entry);
+
+  let msgId;
+  if (mine) {
+    msgId = bot(`✅ ${task} completed by ${nameOf(me)}. Thanks!`);
+    state.actions[msgId] = { task, user: me, type: 'DONE',
+      prevCursor: taken.prevCursor, consumed: taken.consumed, historyId: entry.id };
+  } else {
+    state.tasks[task].credits[me] = (state.tasks[task].credits[me] ?? 0) + 1;
+    state.volunteerLog.push({ task, user: me, stamp, day: entry.day, time: entry.time });
+    msgId = bot(`🙌 ${nameOf(me)} covered ${task} for ${nameOf(taken.turnOwner)}. +1 skip credit, and ${task} moves on.`);
+    state.actions[msgId] = { task, user: me, type: 'VOLUNTEER',
+      prevCursor: taken.prevCursor, consumed: taken.consumed, historyId: entry.id };
+  }
+}
+
+const fmtDay = (ms) => new Intl.DateTimeFormat('en-GB',
+  { timeZone: 'Asia/Tashkent', day: '2-digit', month: '2-digit' }).format(new Date(ms));
+const fmtTime = (ms) => new Intl.DateTimeFormat('en-GB',
+  { timeZone: 'Asia/Tashkent', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+
+/* ============================================================
+   Scenarios
+   ============================================================ */
+const SCENARIOS = [
+  {
+    title: 'Somebody moves out',
+    blurb: 'Dilnoza is next, then she leaves. Check who the bot names.',
+    run() {
+      resetState(false);
+      takeTurn('oshxona');                       // Ollayorbek's turn goes by
+      note(`<b>Set up.</b> Ollayorbek has done /oshxona, so <b>Dilnoza</b> is next. Now she moves out — reply to one of her messages and send <code>/remove_user oshxona</code>, or just watch: I have removed her for you. Ask <code>/now</code>.`);
+      state.tasks.oshxona.members.find((m) => m.user_id === 502).active = false;
+      note(`The old bot answered <b>Sardor</b> here — it stored the turn as a slot number, so losing Dilnoza shifted everybody up one. It also replied "rotation preserved".`);
+    },
+  },
+  {
+    title: 'Everybody is holding a credit',
+    blurb: 'All four have one saved. Run the duty and watch the balances.',
+    run() {
+      resetState(false);
+      for (const p of PEOPLE) state.tasks.oshxona.credits[p.id] = 1;
+      note(`<b>Set up.</b> All four hold one skip credit for /oshxona. Send <code>/oshxona</code> as Ollayorbek, then check <code>/credits</code>.`);
+      note(`The old bot burned a credit from <b>all four</b> and still made Ollayorbek do it — a tax, not a skip.`);
+    },
+  },
+  {
+    title: 'Cover somebody else\'s turn',
+    blurb: 'Send the duty when it is not your turn.',
+    run() {
+      resetState(false);
+      note(`<b>Set up.</b> It is Ollayorbek's turn. Switch to <b>Sardor</b> above and send <code>/oshxona</code>.`);
+      note(`The duty gets done, the rotation moves on, and Sardor earns the credit. The old bot gave him the credit and left the duty undone — so he could mint one every two hours and never work again.`);
+    },
+  },
+  {
+    title: 'The duty that went dead',
+    blurb: 'The worst bug found. The roster is intact and nobody is responsible.',
+    run() {
+      resetState(false);
+      for (const id of [502, 503, 504]) state.tasks.oshxona.credits[id] = 2;
+      state.tasks.oshxona.members.find((m) => m.user_id === 501).active = false;
+      note(`<b>Set up.</b> Ollayorbek moved out. The three left each hold two credits. Send <code>/now</code>.`);
+      note(`The old bot answered <b>"oshxona: no users"</b> — and every <code>/oshxona</code> replied "no users assigned", permanently, with the roster fully intact. There was no command that told you why.`);
+    },
+  },
+];
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+function render() {
+  renderWho();
+  renderLog();
+  renderDuties();
+  renderLedger();
+}
+
+function renderWho() {
+  const host = document.getElementById('who-buttons');
+  host.innerHTML = '';
+  for (const p of PEOPLE) {
+    const b = document.createElement('button');
+    b.className = 'who';
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(p.id === me));
+    b.innerHTML = `${p.name}${p.id === OWNER ? '<span class="crown">OWNER</span>' : ''}`;
+    b.onclick = () => { me = p.id; render(); };
+    host.appendChild(b);
+  }
+  document.getElementById('chat-sub').textContent = `${PEOPLE.length} members`;
+}
+
+function renderLog() {
+  logEl.innerHTML = '';
+  for (const m of state.messages) {
+    if (m.kind === 'note') {
+      const d = document.createElement('div');
+      d.className = 'sysnote';
+      d.innerHTML = m.text;
+      logEl.appendChild(d);
+      continue;
+    }
+    const wrap = document.createElement('div');
+    const mine = m.kind === 'other' && m.author === me;
+    wrap.className = 'msg ' + (m.kind === 'bot' ? 'from-bot' : mine ? 'from-user' : 'from-other');
+    if (m.id === replyTo) wrap.classList.add('selected');
+
+    if (!mine) {
+      const w = document.createElement('div');
+      w.className = 'who-said';
+      w.textContent = m.kind === 'bot' ? 'ApartmentMate' : shortOf(m.author);
+      wrap.appendChild(w);
+    }
+    const b = document.createElement('button');
+    b.className = 'bubble';
+    b.type = 'button';
+    b.textContent = m.text;
+    b.title = 'Tap to reply to this message';
+    b.onclick = () => setReply(m.id);
+    wrap.appendChild(b);
+    logEl.appendChild(wrap);
+  }
+}
+
+function renderDuties() {
+  const host = document.getElementById('duties');
+  host.innerHTML = '';
+  const names = taskNames();
+  if (!names.length) {
+    host.innerHTML = '<div class="panel duty"><em style="color:var(--muted)">No duties yet. Add one with /add_task.</em></div>';
+    return;
+  }
+  for (const t of names) {
+    const task = state.tasks[t];
+    const up = preview(t, 1)[0];
+    const card = document.createElement('div');
+    card.className = 'panel duty';
+
+    const head = document.createElement('div');
+    head.className = 'duty-head';
+    head.innerHTML = `<h3>/${t}</h3><em>${up ? shortOf(up) + ' is up' : 'nobody in the rotation'}</em>`;
+    card.appendChild(head);
+
+    const track = document.createElement('div');
+    track.className = 'track';
+    for (const m of task.members) {
+      const slot = document.createElement('div');
+      slot.className = 'slot' + (!m.active ? ' out' : m.user_id === up ? ' up' : '');
+      const bal = task.credits[m.user_id] ?? 0;
+      slot.innerHTML =
+        `<div class="nm">${shortOf(m.user_id)}</div>` +
+        `<div class="pos">pos ${m.position}${m.active ? '' : ' · out'}</div>` +
+        `<div class="tokens">${'<span class="tok"></span>'.repeat(Math.min(bal, 6))}</div>`;
+      if (bal > 0) slot.title = `${bal} skip credit${bal > 1 ? 's' : ''}`;
+      track.appendChild(slot);
+    }
+    card.appendChild(track);
+    const pad = document.createElement('div');
+    pad.className = 'track-pad';
+    card.appendChild(pad);
+
+    const kv = document.createElement('div');
+    kv.className = 'kv';
+    const totalCredits = Object.values(task.credits).reduce((a, b) => a + b, 0);
+    kv.innerHTML =
+      `<span>cursor <b>${task.cursor}</b></span>` +
+      `<span>active <b>${roster(t).length}/${task.members.length}</b></span>` +
+      `<span>credits out <b>${totalCredits}</b></span>` +
+      `<span>next five <b>${preview(t, 5).map(shortOf).join(' → ') || '—'}</b></span>`;
+    card.appendChild(kv);
+
+    host.appendChild(card);
+  }
+}
+
+function renderLedger() {
+  const host = document.getElementById('ledger');
+  const rows = [
+    ...state.history.map((h) => ({ ...h, type: 'did' })),
+    ...state.volunteerLog.map((v) => ({ ...v, type: 'covered' })),
+  ].sort((a, b) => b.stamp - a.stamp).slice(0, 12);
+
+  if (!rows.length) {
+    host.innerHTML = '<p class="none">Nothing recorded yet. Send a duty command.</p>';
+    return;
+  }
+  const ol = document.createElement('ol');
+  for (const r of rows) {
+    const li = document.createElement('li');
+    li.innerHTML = `${shortOf(r.user)} ${r.type} <code style="font-family:var(--mono)">/${r.task}</code> ` +
+      `<span class="t">${r.day} ${r.time}</span>`;
+    ol.appendChild(li);
+  }
+  host.innerHTML = '';
+  host.appendChild(ol);
+}
+
+/* ---- reply selection ---- */
+function setReply(id) {
+  replyTo = id;
+  const m = state.messages.find((x) => x.id === id);
+  const bar = document.getElementById('replybar');
+  bar.classList.add('on');
+  document.getElementById('reply-snip').textContent =
+    (m.kind === 'bot' ? 'ApartmentMate: ' : shortOf(m.author) + ': ') + m.text.split('\n')[0];
+  renderLog();
+  document.getElementById('input').focus();
+}
+function clearReply() {
+  replyTo = null;
+  document.getElementById('replybar').classList.remove('on');
+  renderLog();
+}
+document.getElementById('reply-clear').onclick = clearReply;
+
+/* ---- composer ---- */
+const CHIPS = ['/now', '/oshxona', '/hammom', '/credits', '/show oshxona',
+  '/history', '/my_tasks', '/tasks', '/cancel', '/data', '/help'];
+const chipHost = document.getElementById('chips');
+for (const c of CHIPS) {
+  const b = document.createElement('button');
+  b.className = 'chip';
+  b.type = 'button';
+  b.textContent = c;
+  b.onclick = () => handle(c);
+  chipHost.appendChild(b);
+}
+
+document.getElementById('entry').onsubmit = (e) => {
+  e.preventDefault();
+  const input = document.getElementById('input');
+  const v = input.value;
+  input.value = '';
+  handle(v);
+};
+
+/* ---- scenarios ---- */
+const scnHost = document.getElementById('scenarios');
+for (const s of SCENARIOS) {
+  const b = document.createElement('button');
+  b.className = 'scenario';
+  b.type = 'button';
+  b.innerHTML = `<strong>${s.title}</strong><span>${s.blurb}</span>`;
+  b.onclick = () => s.run();
+  scnHost.appendChild(b);
+}
+
+document.getElementById('reset').onclick = () => resetState(true);
+
+function resetState(withGreeting) {
+  state = freshState();
+  me = OWNER;
+  replyTo = null;
+  msgSeq = 0;
+  document.getElementById('replybar').classList.remove('on');
+  if (withGreeting) greet();
+  render();
+}
+
+function greet() {
+  note('Two duties exist: <b>/oshxona</b> (kitchen, all four) and <b>/hammom</b> (bathroom, three). Send <code>/now</code> to see whose turn it is.');
+}
+
+resetState(true);
+</script>

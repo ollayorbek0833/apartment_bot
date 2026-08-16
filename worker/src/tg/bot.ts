@@ -167,11 +167,21 @@ export function createBot(env: Env, db: D1Database): Bot<Ctx> {
 
   bot.command('add_task', async (ctx) => {
     if (!(await ownerOnly(ctx))) return;
-    const name = (ctx.match ?? '').trim().split(/\s+/)[0]?.toLowerCase();
-    if (!name) {
+    const words = (ctx.match ?? '').trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
       await ctx.reply('Usage: /add_task task_name');
       return;
     }
+    if (words.length > 1) {
+      // Silently keeping only the first word created a duty nobody meant to
+      // make: "/add_task my task" produced a duty called "my".
+      await ctx.reply(
+        '❌ A task name is one word, because it becomes a command you type. Try ' +
+          `/add_task ${words.map((w) => w.toLowerCase()).join('_')}`,
+      );
+      return;
+    }
+    const name = words[0].toLowerCase();
     if (!TASK_NAME_RE.test(name)) {
       await ctx.reply(
         '❌ A task name must be 1-32 characters of a-z, 0-9 or _ , because it becomes a ' +

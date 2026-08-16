@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from tg.apartment import in_apartment
 from tg.permissions import is_allowed
 
 
@@ -18,7 +19,9 @@ USER_HELP_TEXT = """
 • Example: /cook, /oshxona
 • Only works if you are in that task's rotation
 • If it is your turn → task is completed
-• If not your turn → you volunteer (+1 skip credit)
+• If not your turn → you cover it for whoever was up:
+  the task is done, the rotation moves on, and you get
+  +1 skip credit to sit out a future turn
 • Same task command is ignored for 2 hours
 
 /show task_name
@@ -77,15 +80,19 @@ ADMIN_HELP_TEXT = """
 • Columns: date, time, task, user, type
 
 /cancel  (reply to a bot confirmation message)
-• Undoes that completion or volunteer action
+• Undoes that completion or cover
 • Restores the rotation, the skip credits it spent, and the cooldown
+
+/claim
+• Makes THIS group the apartment the bot serves
+• Only needed if the bot knew several groups before
 
 ━━━━━━━━━━━━
 🧠 ROTATION RULES
 ━━━━━━━━━━━━
 
 • Each task has a fixed order
-• Volunteering gives skip credits
+• Covering somebody's turn completes it and gives you a credit
 • Credits skip future turns
 • Rotation happens ONLY on task execution
 • No daily reset
@@ -101,6 +108,8 @@ ADMIN_HELP_TEXT = """
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
+        return
+    if not await in_apartment(update, quiet=True):
         return
     await update.message.reply_text(USER_HELP_TEXT)
 

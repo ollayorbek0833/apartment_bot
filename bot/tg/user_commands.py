@@ -11,6 +11,7 @@ from db.repositories import (
     add_history, get_credit, get_task_users, is_in_cooldown, update_cooldown,
     add_volunteer_log, is_task_member, log_action, task_exists, get_all_tasks
 )
+from tg.apartment import in_apartment
 from tg.utils import format_user
 
 
@@ -22,7 +23,9 @@ async def task_command(update, context):
     if not message or not message.text or not user or not chat:
         return
 
-    if chat.type not in ("group", "supergroup"):
+    # Quiet: an unrecognised group should not get a scolding for every command
+    # its own other bots receive.
+    if not await in_apartment(update, quiet=True):
         return
 
     task_name = message.text.split()[0][1:].split("@")[0].lower()
@@ -81,25 +84,49 @@ async def task_command(update, context):
                    target_rowid=history_rowid)
         return
 
-    # 5. Otherwise -> VOLUNTEER
+    # 5. Otherwise -> VOLUNTEER, which means covering this turn for real.
+    #
+    # Volunteering used to bank a credit while leaving the duty undone and the
+    # rotation where it was, so a roommate could mint a credit every two hours
+    # without lifting a finger and skip their own turns forever. Taking somebody
+    # else's turn now completes it: the rotation moves on, the person who was up
+    # gets this one for free, and the volunteer earns the credit that lets them
+    # sit out a future turn. One credit per turn actually worked, so there is
+    # nothing to farm.
+    covered_user_id, prev_cursor, consumed = get_next_responsible(task_name)
+    if covered_user_id is None:
+        await message.reply_text("❌ No users assigned to this task.")
+        return
+
     if not add_credit(task_name, user.id):
         await message.reply_text(
             f"❌ Could not record a credit for {task_name}. Ask an admin to re-add you."
         )
         return
 
-    volunteer_rowid = add_volunteer_log(task_name, user.id)
+    history_rowid = add_history(task_name, user.id)
+    add_volunteer_log(task_name, user.id)
     update_cooldown(task_name, user.id)
 
+    try:
+        covered = await context.bot.get_chat_member(chat.id, covered_user_id)
+        covered_name = format_user(covered.user)
+    except Exception:
+        covered_name = f"User({covered_user_id})"
+
     reply = await message.reply_text(
-        f"🙌 Thanks for volunteering for {task_name}! +1 skip credit"
+        f"🙌 {format_user(user)} covered {task_name} for {covered_name}. "
+        f"+1 skip credit, and {task_name} moves on."
     )
     log_action(task_name, user.id, "VOLUNTEER", chat.id, reply.message_id,
-               target_rowid=volunteer_rowid)
+               prev_cursor=prev_cursor, consumed_credits=consumed,
+               target_rowid=history_rowid)
 
 async def my_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not user or not update.message:
+        return
+    if not await in_apartment(update):
         return
 
     with get_db() as conn:
@@ -118,6 +145,8 @@ async def my_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
+        return
+    if not await in_apartment(update):
         return
 
     tasks = get_all_tasks()
@@ -138,6 +167,8 @@ async def credits_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     chat = update.effective_chat
     if not update.message or not chat:
+        return
+    if not await in_apartment(update):
         return
 
     tasks = [context.args[0].lower()] if context.args else get_all_tasks()

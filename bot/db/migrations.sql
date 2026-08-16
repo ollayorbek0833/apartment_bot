@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     name TEXT PRIMARY KEY
 );
 
+-- Single-row key/value store. Holds the one chat this bot belongs to: every
+-- duty, roster and history row is global, so serving a second group would mean
+-- two apartments sharing one rotation and one /data export.
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_task_history_task_done
     ON task_history(task_name, done_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_history_user_done

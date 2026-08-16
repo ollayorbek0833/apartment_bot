@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import OWNER_TELEGRAM_ID
+from tg.apartment import in_apartment
 
 log = logging.getLogger(__name__)
 
@@ -22,8 +23,7 @@ async def is_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
     if not chat or not user or not message:
         return False
 
-    if chat.type not in ("group", "supergroup"):
-        await message.reply_text("❌ This bot works only in groups.")
+    if not await in_apartment(update):
         return False
 
     if user.id != OWNER_TELEGRAM_ID:

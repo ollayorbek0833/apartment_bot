@@ -7,8 +7,8 @@ from telegram.ext import (
 
 from config import BOT_TOKEN
 from db.connection import init_db
-from db.repositories import save_group, remove_group
-from tg.admin_commands import add_task, add_user, show_team, remove_user, cancel
+from db.repositories import get_apartment_chat_id, save_group, remove_group
+from tg.admin_commands import add_task, add_user, claim, show_team, remove_user, cancel
 from tg.data_command import data_command
 from tg.help_command import help_command, help_admin_command
 from tg.user_commands import credits_command, my_tasks, task_command, tasks_command
@@ -30,7 +30,7 @@ TOKEN = BOT_TOKEN
 RESERVED_COMMANDS = (
     "add_task", "add_user", "remove_user", "data",
     "now", "history", "my_tasks", "help", "help_admin",
-    "show", "start", "cancel", "tasks", "credits",
+    "show", "start", "cancel", "tasks", "credits", "claim",
 )
 
 
@@ -69,7 +69,10 @@ async def remember_group(update, context):
         log.info("removed from chat %s, dropped from the announcement list", chat.id)
         return
 
-    save_group(chat.id)
+    # Only the apartment is announced into. Recording every group the bot is
+    # added to would broadcast this flat's roster into a stranger's chat.
+    if get_apartment_chat_id() == chat.id:
+        save_group(chat.id)
 
 
 def main():
@@ -99,6 +102,7 @@ def main():
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("tasks", tasks_command))
     app.add_handler(CommandHandler("credits", credits_command))
+    app.add_handler(CommandHandler("claim", claim))
 
     # dynamic duty commands (/oshxona, /cook, ...)
     app.add_handler(MessageHandler(filters.COMMAND, task_command))

@@ -412,6 +412,43 @@ def remove_last_history(task_name: str, user_id: int, rowid=None):
             (task_name, user_id)
         )
 
+# ---------- THE APARTMENT ----------
+# There is no chat_id anywhere in the schema, so the bot serves exactly one
+# group. It claims the first group its owner uses it in; every other chat is
+# ignored rather than being handed a stranger's rotation.
+
+APARTMENT_CHAT_KEY = "apartment_chat_id"
+
+
+def get_apartment_chat_id():
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT value FROM settings WHERE key = ?", (APARTMENT_CHAT_KEY,)
+        )
+        row = cur.fetchone()
+        return int(row["value"]) if row else None
+
+
+def set_apartment_chat_id(chat_id: int):
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO settings(key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (APARTMENT_CHAT_KEY, str(chat_id))
+        )
+
+
+def claim_apartment_chat_id(chat_id: int) -> bool:
+    """Claim this chat if no apartment is set yet. True if it is now ours."""
+    current = get_apartment_chat_id()
+    if current is None:
+        set_apartment_chat_id(chat_id)
+        return True
+    return current == chat_id
+
+
 # ---------- GROUPS ----------
 
 def save_group(chat_id: int):

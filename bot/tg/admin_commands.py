@@ -5,12 +5,15 @@ from core.simulation import simulate_next
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from config import OWNER_TELEGRAM_ID
 from tg.permissions import is_allowed
 from db.repositories import (
     create_task, task_exists, add_user_to_task, deactivate_user, remove_credit,
     remove_volunteer_log, remove_last_history, get_action_by_message, delete_action,
-    refund_credits, clear_cooldown, set_cursor, get_task_users
+    refund_credits, clear_cooldown, set_cursor, get_task_users,
+    get_apartment_chat_id, set_apartment_chat_id, save_group
 )
+from tg.apartment import in_apartment
 from tg.utils import format_user
 
 # A duty is typed as a Telegram command, so its name has to be a legal command:
@@ -22,7 +25,7 @@ TASK_NAME_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 RESERVED_TASK_NAMES = {
     "add_task", "add_user", "remove_user", "data",
     "now", "history", "my_tasks", "help", "help_admin",
-    "show", "start", "cancel", "tasks", "credits",
+    "show", "start", "cancel", "tasks", "credits", "claim",
 }
 
 
@@ -92,8 +95,44 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"ℹ️ {format_user(target)} is already in {task_name}.")
 
 
+async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner-only: make THIS group the apartment the bot serves.
+
+    Only needed when the bot already knew several groups before it learned to
+    belong to one; otherwise the first owner command claims the group silently.
+    """
+    chat = update.effective_chat
+    user = update.effective_user
+    message = update.effective_message
+
+    if not message or not chat or not user:
+        return
+    if user.id != OWNER_TELEGRAM_ID:
+        await message.reply_text("❌ Bot owner authorization required.")
+        return
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Run this in the apartment group.")
+        return
+
+    previous = get_apartment_chat_id()
+    set_apartment_chat_id(chat.id)
+    save_group(chat.id)
+
+    if previous is None:
+        await message.reply_text("✅ This group is now the apartment. Other chats are ignored.")
+    elif previous == chat.id:
+        await message.reply_text("ℹ️ This group already is the apartment.")
+    else:
+        await message.reply_text(
+            f"✅ Moved. The apartment is now this group; {previous} no longer gets the "
+            f"daily announcement. The rotation and history came along unchanged."
+        )
+
+
 async def show_team(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
+        return
+    if not await in_apartment(update):
         return
 
     if not context.args:
@@ -207,15 +246,29 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # replying /cancel to an old confirmation used to delete the wrong entry.
     target_rowid = action["target_rowid"]
 
+    prev_cursor = action["prev_cursor"]
+    try:
+        consumed = json.loads(action["consumed_credits"] or "[]")
+    except (TypeError, ValueError):
+        consumed = []
+
     if action_type == "VOLUNTEER":
+        # Covering a turn is a completion now, so undoing one has to put back
+        # the history row, the rotation and the credits, not just the credit the
+        # volunteer earned. target_rowid points at the history row; the
+        # volunteer log is matched by recency, it only feeds /data.
         remove_credit(task_name, user_id)
-        remove_volunteer_log(task_name, user_id, rowid=target_rowid)
+        remove_last_history(task_name, user_id, rowid=target_rowid)
+        remove_volunteer_log(task_name, user_id)
+        if prev_cursor is not None:
+            set_cursor(task_name, prev_cursor)
+        refund_credits(task_name, consumed)
         clear_cooldown(task_name, user_id)
         delete_action(action["id"])
 
         await message.reply_text(
-            "↩️ Volunteer action cancelled.\n"
-            "❌ Credit removed"
+            f"↩️ Cover cancelled for {task_name}.\n"
+            f"❌ Credit removed, and the turn goes back to whoever had it."
         )
         return
 
@@ -226,16 +279,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # every skip credit it burned on the way. Rewinding the cursor by one and
         # leaving the credits spent is what used to make people lose a credit for
         # a turn that never happened.
-        prev_cursor = action["prev_cursor"]
         if prev_cursor is not None:
             set_cursor(task_name, prev_cursor)
-
-        try:
-            consumed = json.loads(action["consumed_credits"] or "[]")
-        except (TypeError, ValueError):
-            consumed = []
         refund_credits(task_name, consumed)
-
         clear_cooldown(task_name, user_id)
         delete_action(action["id"])
 

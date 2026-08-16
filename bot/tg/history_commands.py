@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 from db.connection import get_db
 from db.repositories import parse_ts, task_exists
+from tg.apartment import in_apartment
 from tg.utils import format_user
 
 
@@ -11,6 +12,8 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
 
     if not user or not chat or not update.message:
+        return
+    if not await in_apartment(update):
         return
 
     # -------- /history task_name --------

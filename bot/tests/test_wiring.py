@@ -27,7 +27,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, TypeHandle
 
 import main                                                        # noqa: E402
 from db.connection import init_db                                  # noqa: E402
-from db.repositories import get_all_groups, create_task, add_user_to_task  # noqa: E402
+from db.repositories import (                                     # noqa: E402
+    get_all_groups, create_task, add_user_to_task, set_apartment_chat_id,
+    get_apartment_chat_id,
+)
 from tg.admin_commands import RESERVED_TASK_NAMES, TASK_NAME_RE    # noqa: E402
 from scheduler.daily_jobs import scheduler, setup_scheduler        # noqa: E402
 
@@ -56,7 +59,7 @@ def build_app():
         ("help", main.help_command), ("help_admin", main.help_admin_command),
         ("show", main.show_team), ("start", main.help_command),
         ("cancel", main.cancel), ("tasks", main.tasks_command),
-        ("credits", main.credits_command),
+        ("credits", main.credits_command), ("claim", main.claim),
     ):
         app.add_handler(CommandHandler(name, handler))
     app.add_handler(MessageHandler(main.filters.COMMAND, main.task_command))
@@ -79,6 +82,7 @@ async def dispatch_tests():
     app = build_app()
     chat = Chat(id=-1001234, type="supergroup")
     user = User(id=555, first_name="Ali", is_bot=False)
+    set_apartment_chat_id(chat.id)
 
     create_task("oshxona")
     add_user_to_task("oshxona", user.id)

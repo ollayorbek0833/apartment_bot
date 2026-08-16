@@ -95,6 +95,32 @@ def _migrate_lowercase_task_names(conn):
         log.info("renamed task %r to %r so /%s reaches it", name, lower, lower)
 
 
+def _migrate_adopt_single_group(conn):
+    """Adopt the apartment automatically when there is only one candidate.
+
+    A live database already lists the groups the bot has seen. If exactly one is
+    known, that is the apartment and nobody needs to run a command. If several
+    are known the bot cannot guess, so the owner claims one with /claim.
+    """
+    already = conn.execute(
+        "SELECT 1 FROM settings WHERE key = 'apartment_chat_id'"
+    ).fetchone()
+    if already:
+        return
+    rows = conn.execute("SELECT chat_id FROM groups").fetchall()
+    if len(rows) == 1:
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES ('apartment_chat_id', ?)",
+            (str(rows[0]["chat_id"]),),
+        )
+        log.info("adopted chat %s as the apartment", rows[0]["chat_id"])
+    elif len(rows) > 1:
+        log.warning(
+            "%d groups on record and no apartment set; the owner must run /claim "
+            "in the right group", len(rows)
+        )
+
+
 def init_db():
     existed = DB_PATH.exists()
     log.info("using database %s (%s)", DB_PATH, "existing" if existed else "NEW, empty")
@@ -114,6 +140,7 @@ def init_db():
         for name, fn in (
             ("lowercase_task_names", _migrate_lowercase_task_names),
             ("cursor_stores_position", _migrate_cursor_to_position),
+            ("adopt_single_group", _migrate_adopt_single_group),
         ):
             applied = conn.execute(
                 "SELECT 1 FROM schema_migrations WHERE name = ?", (name,)

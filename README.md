@@ -53,7 +53,7 @@ When a user interacts with a task:
 
 -   If it is their turn, the task is completed ✅
     
--   If it is not their turn, they volunteer and earn a skip credit 🎫
+-   If it is not their turn, they cover it for whoever was up: the task is done, the rotation moves on, and the volunteer earns a skip credit 🎫 — so a credit always costs somebody a real turn and cannot be farmed
     
 -   Repeating the same task action within 2 hours is ignored ⏳
     
@@ -97,6 +97,8 @@ History is stored for 30 days on a rolling basis and can be exported by admins a
 * * *
 
 🚀 Deployment
+
+ApartmentMate serves exactly one Telegram group — the first group its owner uses it in, or the one named by /claim. Every other chat is ignored, because no table in the schema carries a chat id.
 
 ApartmentMate runs 24/7 on an AWS EC2 instance using the AWS Free Tier.  
 It is managed as a systemd service and automatically restarts on crashes or reboots, ensuring continuous availability.

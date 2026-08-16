@@ -270,6 +270,81 @@ check("the old name is gone", R.task_exists("Kitchen"), False)
 check("its roster came along", [r["user_id"] for r in R.get_task_users("kitchen")], [A])
 
 print()
+print("D1: covering somebody's turn completes it, and cannot be farmed")
+# Old rule: typing the duty command when it was not your turn banked a credit,
+# left the duty undone and left the rotation where it was — so one roommate
+# could mint a credit every two hours and never work again.
+t = fresh()
+check("A is up", simulate_next(t, 1), [A])
+covered, prev, consumed = get_next_responsible(t)      # B covers for A
+R.add_credit(t, B)
+R.add_history(t, B)
+check("the turn that was covered belonged to A", covered, A)
+check("B earned exactly one credit", R.get_credit(t, B), 1)
+check("the rotation moved past A, onto B's slot", R.get_cursor(t), 1)
+# B is next in line but is holding the credit they just earned, so the credit
+# does its job immediately: B sits out and C takes the turn, then it is A again.
+check("B's own credit spends itself on B's next turn", simulate_next(t, 2), [C, A])
+# Farming check: every credit costs a real turn, so N covers advance the
+# rotation N times instead of minting N free credits against a standing turn.
+before = R.get_cursor(t)
+for _ in range(3):
+    get_next_responsible(t)
+check("three more turns actually moved the cursor", R.get_cursor(t) != before, True)
+
+print()
+print("D1: cancelling a cover puts the turn back where it was")
+t = fresh()
+covered, prev, consumed = get_next_responsible(t)
+R.add_credit(t, B)
+rowid = R.add_history(t, B)
+R.log_action(t, B, "VOLUNTEER", -100, 21, prev_cursor=prev,
+             consumed_credits=consumed, target_rowid=rowid)
+action = R.get_action_by_message(-100, 21)
+R.remove_credit(t, B)
+R.remove_last_history(t, B, rowid=action["target_rowid"])
+R.set_cursor(t, action["prev_cursor"])
+check("B's credit is gone again", R.get_credit(t, B), 0)
+check("A is up again", simulate_next(t, 1), [A])
+with get_db() as conn:
+    check("the history entry went with it",
+          conn.execute("SELECT COUNT(*) c FROM task_history").fetchone()["c"], 0)
+
+print()
+print("D2: the bot belongs to exactly one group")
+t = fresh()
+check("no apartment before anything happens", R.get_apartment_chat_id(), None)
+check("the first chat claims it", R.claim_apartment_chat_id(-100), True)
+check("the same chat is still ours", R.claim_apartment_chat_id(-100), True)
+check("a different chat is refused", R.claim_apartment_chat_id(-999), False)
+check("and the apartment did not move", R.get_apartment_chat_id(), -100)
+R.set_apartment_chat_id(-777)
+check("/claim can move it deliberately", R.get_apartment_chat_id(), -777)
+
+print()
+print("D2: an existing install adopts its one known group without being asked")
+if connection.DB_PATH.exists():
+    connection.DB_PATH.unlink()
+init_db()
+R.save_group(-4242)
+with get_db() as conn:
+    conn.execute("DELETE FROM schema_migrations WHERE name = 'adopt_single_group'")
+init_db()
+check("the single known group became the apartment", R.get_apartment_chat_id(), -4242)
+
+print()
+print("D2: with several known groups the bot refuses to guess")
+if connection.DB_PATH.exists():
+    connection.DB_PATH.unlink()
+init_db()
+R.save_group(-1)
+R.save_group(-2)
+with get_db() as conn:
+    conn.execute("DELETE FROM schema_migrations WHERE name = 'adopt_single_group'")
+init_db()
+check("no apartment was guessed", R.get_apartment_chat_id(), None)
+
+print()
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
     sys.exit(1)

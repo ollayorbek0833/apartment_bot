@@ -4,6 +4,7 @@ from telegram.error import Forbidden, BadRequest
 
 from db.connection import get_db
 from core.simulation import simulate_next
+from tg.apartment import in_apartment
 from tg.utils import format_user
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ async def now(update, context):
     chat = update.effective_chat
     if not chat or not update.message:
         return
+    if not await in_apartment(update):
+        return
 
     text = await build_today_text(context.bot, chat.id)
     await update.message.reply_text(text)
@@ -62,9 +65,14 @@ async def run_today_for_all_groups(app):
     being retried every morning forever, and anything else is logged rather than
     swallowed by a bare `pass`.
     """
-    from db.repositories import get_all_groups, remove_group
+    from db.repositories import get_all_groups, get_apartment_chat_id, remove_group
 
-    for chat_id in get_all_groups():
+    # Only the apartment. Announcing into every group the bot was ever added to
+    # would post this flat's roster into a stranger's chat.
+    apartment = get_apartment_chat_id()
+    targets = [apartment] if apartment is not None else get_all_groups()
+
+    for chat_id in targets:
         try:
             text = await build_today_text(app.bot, chat_id)
             await app.bot.send_message(chat_id, text)

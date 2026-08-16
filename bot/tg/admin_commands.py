@@ -37,6 +37,15 @@ async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /add_task task_name")
         return
 
+    if len(context.args) > 1:
+        # Silently keeping only the first word created a duty nobody meant to
+        # make: "/add_task my task" produced a duty called "my".
+        await update.message.reply_text(
+            "❌ A task name is one word, because it becomes a command you type. "
+            "Try /add_task " + "_".join(a.lower() for a in context.args)
+        )
+        return
+
     task_name = context.args[0].lower()
 
     if not TASK_NAME_RE.match(task_name):

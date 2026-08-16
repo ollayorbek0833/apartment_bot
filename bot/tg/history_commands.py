@@ -1,8 +1,8 @@
-from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from db.connection import get_db
+from db.repositories import parse_ts, task_exists
 from tg.utils import format_user
 
 
@@ -10,12 +10,18 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not user or not chat or not update.message:
         return
 
     # -------- /history task_name --------
     if context.args:
-        task_name = context.args[0]
+        task_name = context.args[0].lower()
+
+        if not task_exists(task_name):
+            await update.message.reply_text(
+                f"❌ There is no task called '{task_name}'. /tasks lists them all."
+            )
+            return
 
         with get_db() as conn:
             cur = conn.execute(
@@ -38,9 +44,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for row in rows:
             user_id = row["user_id"]
-            done_at = datetime.fromisoformat(row["done_at"])
-
-            date_str = done_at.strftime("%d.%m")
+            date_str = parse_ts(row["done_at"]).strftime("%d.%m")
 
             try:
                 member = await context.bot.get_chat_member(chat.id, user_id)
@@ -74,10 +78,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["🕒 Your last duties:"]
 
     for row in rows:
-        task = row["task_name"]
-        done_at = datetime.fromisoformat(row["done_at"])
-        date_str = done_at.strftime("%d.%m")
-
-        lines.append(f"{date_str} – {task}")
+        date_str = parse_ts(row["done_at"]).strftime("%d.%m")
+        lines.append(f"{date_str} – {row['task_name']}")
 
     await update.message.reply_text("\n".join(lines))

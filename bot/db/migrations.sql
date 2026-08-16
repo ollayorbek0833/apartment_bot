@@ -59,3 +59,17 @@ CREATE TABLE IF NOT EXISTS task_actions (
 CREATE TABLE IF NOT EXISTS groups (
     chat_id INTEGER PRIMARY KEY
 );
+
+-- One row per one-off data migration that cannot be expressed as CREATE IF NOT EXISTS.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    name TEXT PRIMARY KEY
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_history_task_done
+    ON task_history(task_name, done_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_history_user_done
+    ON task_history(user_id, done_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_volunteer_log_task_user
+    ON task_volunteer_log(task_name, user_id, volunteered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_actions_message
+    ON task_actions(chat_id, message_id);

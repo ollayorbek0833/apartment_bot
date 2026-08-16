@@ -101,6 +101,28 @@ History is stored for 30 days on a rolling basis and can be exported by admins a
 ApartmentMate runs 24/7 on an AWS EC2 instance using the AWS Free Tier.  
 It is managed as a systemd service and automatically restarts on crashes or reboots, ensuring continuous availability.
 
+Configuration lives in two places. `bot/config.py` is gitignored and must define `BOT_TOKEN`
+and `OWNER_TELEGRAM_ID`. Everything else is an environment variable:
+
+| variable | default | why you would set it |
+|---|---|---|
+| `BOT_DB_PATH` | `bot.db` next to the working directory | Pin the database to an absolute path. Started from the wrong directory the bot creates a new empty database instead of finding the real one. |
+| `BOT_TIMEZONE` | `Asia/Tashkent` | Timezone the daily announcement fires in and history is displayed in. The server clock is UTC; this is not. |
+| `ANNOUNCE_HOUR` | `9` | Hour of the daily announcement, in `BOT_TIMEZONE`. |
+
+* * *
+
+🧪 Tests
+
+    cd bot
+    python3 -m tests.test_rotation
+    python3 -m tests.test_wiring
+
+No network and no bot token required. `test_rotation` covers rotation order, skip credits,
+removal and reactivation, undo, the 30-day sweep and the cursor migration. `test_wiring`
+dispatches real updates through python-telegram-bot to cover handler ordering, duty-name
+validation and the scheduler's timezone.
+
 * * *
 
 🎯 Why This Project Matters

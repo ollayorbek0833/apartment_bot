@@ -3,10 +3,11 @@ from telegram.ext import ContextTypes
 
 from core.rotation_engine import get_next_responsible
 from core.simulation import simulate_next
+from db.connection import get_db
 from db.repositories import (
     add_credit,
     add_history, is_in_cooldown, update_cooldown, add_volunteer_log,
-    log_action, task_exists, get_all_tasks
+    is_task_member, log_action, task_exists, get_all_tasks
 )
 from tg.utils import format_user
 
@@ -16,22 +17,35 @@ async def task_command(update, context):
     user = update.effective_user
     chat = update.effective_chat
 
-    if not message or not user or not chat:
+    if not message or not message.text or not user or not chat:
         return
 
-    task_name = message.text.split()[0][1:].split("@")[0]
+    if chat.type not in ("group", "supergroup"):
+        return
+
+    task_name = message.text.split()[0][1:].split("@")[0].lower()
 
     if not task_exists(task_name):
         return
 
-    # 1️⃣ Cooldown check
+    # 1. Only people in this duty's rotation can act on it. Without this the bot
+    #    told a bystander "+1 skip credit" while storing nothing, because the
+    #    UPDATE had no row to hit.
+    if not is_task_member(task_name, user.id):
+        await message.reply_text(
+            f"❌ You are not in the {task_name} rotation, so this does not count. "
+            f"Ask an admin to add you."
+        )
+        return
+
+    # 2. Cooldown check
     if is_in_cooldown(task_name, user.id):
         await message.reply_text(
             "⏳ You already used this task recently. Try again later."
         )
         return
 
-    # 2️⃣ Simulate today's responsible (READ-ONLY)
+    # 3. Who is responsible right now (read-only)
     simulation = simulate_next(task_name, 1)
     if not simulation:
         await message.reply_text("❌ No users assigned to this task.")
@@ -39,39 +53,48 @@ async def task_command(update, context):
 
     responsible_id = simulation[0]
 
-    # 3️⃣ If user IS responsible → EXECUTE task
+    # 4. If user IS responsible -> EXECUTE task
     if user.id == responsible_id:
-        executed_user_id = get_next_responsible(task_name)
+        executed_user_id, prev_cursor, consumed = get_next_responsible(task_name)
+        if executed_user_id is None:
+            await message.reply_text("❌ No users assigned to this task.")
+            return
 
-        # Save execution
-        add_history(task_name, executed_user_id)
+        history_rowid = add_history(task_name, executed_user_id)
         update_cooldown(task_name, user.id)
 
         reply = await message.reply_text(
             f"✅ {task_name} completed by {format_user(user)}. Thanks!"
         )
-        log_action(task_name, user.id, "DONE", chat.id, reply.message_id)
+        log_action(task_name, user.id, "DONE", chat.id, reply.message_id,
+                   prev_cursor=prev_cursor, consumed_credits=consumed,
+                   target_rowid=history_rowid)
         return
 
-    # 4️⃣ Otherwise → VOLUNTEER
-    add_credit(task_name, user.id)
-    add_volunteer_log(task_name, user.id)
+    # 5. Otherwise -> VOLUNTEER
+    if not add_credit(task_name, user.id):
+        await message.reply_text(
+            f"❌ Could not record a credit for {task_name}. Ask an admin to re-add you."
+        )
+        return
+
+    volunteer_rowid = add_volunteer_log(task_name, user.id)
     update_cooldown(task_name, user.id)
 
     reply = await message.reply_text(
         f"🙌 Thanks for volunteering for {task_name}! +1 skip credit"
     )
-    log_action(task_name, user.id, "VOLUNTEER", chat.id, reply.message_id)
+    log_action(task_name, user.id, "VOLUNTEER", chat.id, reply.message_id,
+               target_rowid=volunteer_rowid)
 
 async def my_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not user:
+    if not user or not update.message:
         return
 
-    from db.connection import get_db
     with get_db() as conn:
         cur = conn.execute(
-            "SELECT task_name FROM task_users WHERE user_id = ? AND active = 1",
+            "SELECT task_name FROM task_users WHERE user_id = ? AND active = 1 ORDER BY task_name",
             (user.id,)
         )
         tasks = [row["task_name"] for row in cur.fetchall()]
@@ -80,10 +103,13 @@ async def my_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("You are not assigned to any tasks.")
         return
 
-    text = "🧾 Your tasks:\n" + "\n".join(f"- {t}" for t in tasks)
+    text = "🧾 Your tasks:\n" + "\n".join(f"- /{t}" for t in tasks)
     await update.message.reply_text(text)
 
 async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+
     tasks = get_all_tasks()
 
     if not tasks:

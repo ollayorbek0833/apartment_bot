@@ -16,6 +16,7 @@ USER_HELP_TEXT = """
 
 /task_name
 • Example: /cook, /oshxona
+• Only works if you are in that task's rotation
 • If it is your turn → task is completed
 • If not your turn → you volunteer (+1 skip credit)
 • Same task command is ignored for 2 hours
@@ -67,6 +68,14 @@ ADMIN_HELP_TEXT = """
 • Shows next 5 turns (simulation)
 • Does NOT change anything
 
+/data
+• Exports the last 30 days of activity as a CSV
+• Columns: date, time, task, user, type
+
+/cancel  (reply to a bot confirmation message)
+• Undoes that completion or volunteer action
+• Restores the rotation, the skip credits it spent, and the cooldown
+
 ━━━━━━━━━━━━
 🧠 ROTATION RULES
 ━━━━━━━━━━━━
@@ -87,12 +96,14 @@ ADMIN_HELP_TEXT = """
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
     await update.message.reply_text(USER_HELP_TEXT)
 
 
 async def help_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # is_allowed already replies with the reason; do not answer a second time.
     if not await is_allowed(update, context):
-        await update.message.reply_text("❌ This command is for admins only.")
         return
 
     await update.message.reply_text(ADMIN_HELP_TEXT)

@@ -1,7 +1,13 @@
-from copy import deepcopy
+from core.rotation_engine import next_turn
 from db.repositories import get_task_users, get_cursor, get_credit
 
+
 def simulate_next(task_name: str, steps: int):
+    """Read-only: who takes the next ``steps`` turns, changing nothing.
+
+    Runs the exact same next_turn() the live engine runs, against a throwaway
+    copy of the credit balances.
+    """
     users = get_task_users(task_name)
     if not users:
         return []
@@ -12,22 +18,11 @@ def simulate_next(task_name: str, steps: int):
     }
 
     cursor = get_cursor(task_name)
-    size = len(users)
     result = []
 
-    index = cursor
-    safety = 0
-
-    while len(result) < steps and safety < size * steps * 2:
-        user = users[index % size]
-        uid = user["user_id"]
-
-        if credits[uid] > 0:
-            credits[uid] -= 1
-        else:
-            result.append(uid)
-
-        index += 1
-        safety += 1
+    for _ in range(max(0, steps)):
+        index, _skipped = next_turn(users, cursor, credits)
+        result.append(users[index]["user_id"])
+        cursor = users[(index + 1) % len(users)]["position"]
 
     return result

@@ -1,0 +1,29 @@
+name = "apartmentmate"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron runs in UTC. Tashkent is UTC+5 and has no daylight saving, so subtract
+# five hours from the local time you want. 09:00 Tashkent is 04:00 UTC.
+[triggers]
+crons = [
+  "0 4 * * *",   # 09:00 Asia/Tashkent — daily "who is responsible" announcement
+  "0 22 * * *",  # 03:00 Asia/Tashkent — prune the rolling 30-day history
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "apartmentmate"
+# Filled in by `wrangler d1 create apartmentmate`.
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+BOT_TIMEZONE = "Asia/Tashkent"
+ANNOUNCE_HOUR = "9"
+
+# Secrets, set with `wrangler secret put <NAME>` — never in this file:
+#   BOT_TOKEN           from @BotFather
+#   OWNER_TELEGRAM_ID   your numeric Telegram user id
+#   WEBHOOK_SECRET      any long random string; Telegram echoes it back on every
+#                       request so the Worker can reject forged updates
